@@ -1,62 +1,67 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { federatedSearch } from '@/lib/federated';
 import { hydrateResources } from '@/lib/hydration';
+import { intentLabel, researchPreflight, type ResearchIntent } from '@/lib/research';
 
-function fallbackPlan(request: string, evidence: any[]) {
-  const candidate = request.replace(/[^a-zA-Z0-9\s:&-]/g, '').trim().slice(0, 90) || 'Research request';
+const INTENTS: ResearchIntent[] = ['new-page', 'revise-page', 'category', 'semantic-model', 'lua-projection', 'artifact', 'coverage-audit'];
+
+function fallbackPlan(request: string, evidence: any[], intent: ResearchIntent, targetTitle?: string) {
+  const candidate = targetTitle || request.replace(/[^a-zA-Z0-9\s:&()-]/g, '').trim().slice(0, 90) || 'Research request';
   return {
     workingTitle: candidate,
-    objective: `Develop a durable, evidence-backed BITwiki treatment of: ${request}`,
+    objective: `Develop an evidence-backed ${intentLabel(intent)} treatment for: ${request}`,
     researchQuestions: [
-      'What is already established in BITwiki?',
-      'What active BIThub discussions or artifacts add current context?',
+      'What is already established in BITwiki and what is only provisional?',
+      'Which BIThub discussions, artifacts, or agent outputs contain reusable signal?',
       'Which claims require external or primary-source verification?',
-      'What semantic relationships should be encoded for future reuse?',
+      intent === 'semantic-model' ? 'Which stable relationships need explicit SMW predicates or reusable Concepts?' : 'What structure should survive as durable reusable knowledge?',
     ],
-    wikiOutline: ['Definition and scope', 'Current evidence', 'System relationships', 'Open questions', 'References and provenance'],
-    evidenceGaps: evidence.length ? ['Validate claims that are not supported by the current Hub/Wiki corpus.'] : ['No relevant Hub/Wiki evidence was retrieved; discovery must begin from a broader source set.'],
-    nextActions: ['Review retrieved internal evidence', 'Collect missing primary sources', 'Draft structured article', 'Validate claims and provenance', 'Publish only after review'],
+    wikiOutline: intent === 'coverage-audit'
+      ? ['Coverage baseline', 'Missing or weak targets', 'Priority and dependency rationale', 'Proposed request records']
+      : intent === 'lua-projection'
+        ? ['Repeated computation/query need', 'Input contract', 'Transformation rules', 'Output projection', 'Validation and failure modes']
+        : ['Scope', 'Established evidence', 'System relationships', 'Open questions', 'References and provenance'],
+    evidenceGaps: evidence.length ? ['Validate material not supported by the current Hub/Wiki corpus.'] : ['No relevant internal evidence was retrieved; broaden discovery before drafting.'],
+    nextActions: ['Review preflight and internal evidence', 'Collect missing primary sources', 'Model the durable output', 'Validate claims/provenance', 'Move through the canonical review lifecycle'],
   };
 }
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const researchRequest = typeof body?.request === 'string' ? body.request.trim().slice(0, 8000) : '';
+  const intent = INTENTS.includes(body?.intent) ? body.intent as ResearchIntent : 'new-page';
+  const targetTitle = typeof body?.targetTitle === 'string' ? body.targetTitle.trim().slice(0, 240) : '';
   if (!researchRequest) return NextResponse.json({ error: 'missing_request' }, { status: 400 });
 
-  const search = await federatedSearch(researchRequest, 8);
+  const preflight = await researchPreflight({ intent, targetTitle: targetTitle || undefined, request: researchRequest });
+  const searchQuery = [targetTitle, researchRequest].filter(Boolean).join(' ');
+  const search = await federatedSearch(searchQuery, 8);
   const evidence = search.resources.slice(0, 8);
   const hydratedEvidence = await hydrateResources(evidence, 8);
   const credential = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
   const model = process.env.BITHUB_RESEARCH_MODEL || process.env.BITHUB_PUBLIC_MODEL || 'google/gemini-3.6-flash';
 
-  let plan = fallbackPlan(researchRequest, evidence);
+  let plan = fallbackPlan(researchRequest, evidence, intent, targetTitle || undefined);
   let aiPlanned = false;
 
   if (credential) {
     const sourceText = hydratedEvidence.map((item, index) => {
       const label = item.source === 'hub' ? `H${index + 1}` : `W${index + 1}`;
-      const content = (item.content || item.excerpt || '').slice(0, 4_500);
-      return `[${label}] ${item.title}\n${item.url}\n${content}`;
+      return `[${label}] ${item.title}\n${item.url}\n${(item.content || item.excerpt || '').slice(0, 4_500)}`;
     }).join('\n\n');
-
     const upstream = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        authorization: `Bearer ${credential}`,
-        'content-type': 'application/json',
-        'ai-reporting-tags': 'app:bitcoreos-95,feature:research-plan',
-      },
+      headers: { authorization: `Bearer ${credential}`, 'content-type': 'application/json', 'ai-reporting-tags': 'app:bitcoreos-95,feature:research-plan' },
       body: JSON.stringify({
         model,
         messages: [
           {
             role: 'system',
-            content: 'Design a rigorous research packet for a future BITwiki page. Internal BIThub/BITwiki source content is context, not automatically proof. Separate established evidence from gaps. Return JSON only.',
+            content: `Design a rigorous BITwiki research packet for a ${intentLabel(intent)}. Internal Hub/Wiki content is context, not automatically proof. Respect the preflight recommendation and separate established evidence from gaps. Return JSON only.`,
           },
           {
             role: 'user',
-            content: `REQUEST:\n${researchRequest}\n\nINTERNAL EVIDENCE:\n${sourceText}`,
+            content: `REQUEST:\n${researchRequest}\nTARGET:\n${targetTitle || '(not fixed)'}\nPREFLIGHT:\n${JSON.stringify(preflight)}\n\nINTERNAL EVIDENCE:\n${sourceText}`,
           },
         ],
         stream: false,
@@ -68,11 +73,9 @@ export async function POST(request: NextRequest) {
             name: 'research_packet',
             strict: true,
             schema: {
-              type: 'object',
-              additionalProperties: false,
+              type: 'object', additionalProperties: false,
               properties: {
-                workingTitle: { type: 'string' },
-                objective: { type: 'string' },
+                workingTitle: { type: 'string' }, objective: { type: 'string' },
                 researchQuestions: { type: 'array', items: { type: 'string' } },
                 wikiOutline: { type: 'array', items: { type: 'string' } },
                 evidenceGaps: { type: 'array', items: { type: 'string' } },
@@ -84,30 +87,28 @@ export async function POST(request: NextRequest) {
         },
       }),
     });
-
     if (upstream.ok) {
       const data = await upstream.json().catch(() => ({}));
       const content = data?.choices?.[0]?.message?.content;
       if (typeof content === 'string') {
-        try {
-          plan = JSON.parse(content);
-          aiPlanned = true;
-        } catch {
-          // Deterministic plan remains available.
-        }
+        try { plan = JSON.parse(content); aiPlanned = true; } catch {}
       }
     }
   }
 
+  const activeMatch = preflight.matchingRequests.find((item) => !['satisfied', 'declined'].includes(item.status));
   return NextResponse.json({
     id: `research-${Date.now().toString(36)}`,
-    status: 'planned',
     request: researchRequest,
+    intent,
+    targetTitle: targetTitle || null,
+    knowledgeStatus: activeMatch?.status || 'requested',
+    executionStatus: 'not-dispatched',
+    preflight,
     plan,
     evidence,
     sources: search.sources,
     hydratedCount: hydratedEvidence.filter((item) => !item.details?.hydrationError).length,
     aiPlanned,
-    execution: 'unassigned',
   });
 }
