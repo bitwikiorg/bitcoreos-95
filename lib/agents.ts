@@ -3,7 +3,8 @@ import { HUB, stripHtml } from './federated';
 export type B8Agent = {
   index: number;
   name: string;
-  username: string;
+  username?: string;
+  registryIdentity: string;
   intent: string;
   family: 'core' | 'mas' | 'philosophical' | 'provider';
 };
@@ -39,10 +40,12 @@ export async function getB8Agents() {
     const values = cells(row[1] || '');
     const index = Number(values[0]);
     if (!Number.isInteger(index) || index <= 0 || values.length < 4) continue;
+    const registryIdentity = values[2].trim();
     agents.push({
       index,
       name: values[1],
-      username: values[2].replace(/^@/, ''),
+      username: registryIdentity.startsWith('@') ? registryIdentity.slice(1) : undefined,
+      registryIdentity,
       intent: values.slice(3).join(' '),
       family: familyFor(index),
     });
