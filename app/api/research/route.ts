@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { federatedSearch } from '@/lib/federated';
 import { hydrateResources } from '@/lib/hydration';
 import { intentLabel, researchPreflight, type ResearchIntent } from '@/lib/research';
+import { semanticSubject } from '@/lib/semantic';
 
 const INTENTS: ResearchIntent[] = ['new-page', 'revise-page', 'category', 'semantic-model', 'lua-projection', 'artifact', 'coverage-audit'];
 
-function fallbackPlan(request: string, evidence: any[], intent: ResearchIntent, targetTitle?: string) {
+function fallbackPlan(request: string, evidence: any[], intent: ResearchIntent, targetTitle?: string, semanticFactCount = 0) {
   const candidate = targetTitle || request.replace(/[^a-zA-Z0-9\s:&()-]/g, '').trim().slice(0, 90) || 'Research request';
   return {
     workingTitle: candidate,
@@ -14,7 +15,9 @@ function fallbackPlan(request: string, evidence: any[], intent: ResearchIntent, 
       'What is already established in BITwiki and what is only provisional?',
       'Which BIThub discussions, artifacts, or agent outputs contain reusable signal?',
       'Which claims require external or primary-source verification?',
-      intent === 'semantic-model' ? 'Which stable relationships need explicit SMW predicates or reusable Concepts?' : 'What structure should survive as durable reusable knowledge?',
+      intent === 'semantic-model'
+        ? `Which stable relationships need explicit SMW predicates or reusable Concepts${semanticFactCount ? `, given ${semanticFactCount} current semantic fact groups on the target` : ''}?`
+        : 'What structure should survive as durable reusable knowledge?',
     ],
     wikiOutline: intent === 'coverage-audit'
       ? ['Coverage baseline', 'Missing or weak targets', 'Priority and dependency rationale', 'Proposed request records']
@@ -33,7 +36,11 @@ export async function POST(request: NextRequest) {
   const targetTitle = typeof body?.targetTitle === 'string' ? body.targetTitle.trim().slice(0, 240) : '';
   if (!researchRequest) return NextResponse.json({ error: 'missing_request' }, { status: 400 });
 
-  const preflight = await researchPreflight({ intent, targetTitle: targetTitle || undefined, request: researchRequest });
+  const [preflight, semanticResult] = await Promise.all([
+    researchPreflight({ intent, targetTitle: targetTitle || undefined, request: researchRequest }),
+    targetTitle ? semanticSubject(targetTitle).catch(() => null) : Promise.resolve(null),
+  ]);
+  const semanticFacts = semanticResult?.facts || [];
   const searchQuery = [targetTitle, researchRequest].filter(Boolean).join(' ');
   const search = await federatedSearch(searchQuery, 8);
   const evidence = search.resources.slice(0, 8);
@@ -41,7 +48,7 @@ export async function POST(request: NextRequest) {
   const credential = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
   const model = process.env.BITHUB_RESEARCH_MODEL || process.env.BITHUB_PUBLIC_MODEL || 'google/gemini-3.6-flash';
 
-  let plan = fallbackPlan(researchRequest, evidence, intent, targetTitle || undefined);
+  let plan = fallbackPlan(researchRequest, evidence, intent, targetTitle || undefined, semanticFacts.length);
   let aiPlanned = false;
 
   if (credential) {
@@ -57,11 +64,11 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `Design a rigorous BITwiki research packet for a ${intentLabel(intent)}. Internal Hub/Wiki content is context, not automatically proof. Respect the preflight recommendation and separate established evidence from gaps. Return JSON only.`,
+            content: `Design a rigorous BITwiki research packet for a ${intentLabel(intent)}. Internal Hub/Wiki content and current SMW facts are context, not automatically proof. Respect the preflight recommendation and separate established evidence from gaps. Return JSON only.`,
           },
           {
             role: 'user',
-            content: `REQUEST:\n${researchRequest}\nTARGET:\n${targetTitle || '(not fixed)'}\nPREFLIGHT:\n${JSON.stringify(preflight)}\n\nINTERNAL EVIDENCE:\n${sourceText}`,
+            content: `REQUEST:\n${researchRequest}\nTARGET:\n${targetTitle || '(not fixed)'}\nPREFLIGHT:\n${JSON.stringify(preflight)}\nCURRENT SEMANTIC FACTS:\n${JSON.stringify(semanticFacts.slice(0, 24))}\n\nINTERNAL EVIDENCE:\n${sourceText}`,
           },
         ],
         stream: false,
@@ -105,6 +112,7 @@ export async function POST(request: NextRequest) {
     knowledgeStatus: activeMatch?.status || 'requested',
     executionStatus: 'not-dispatched',
     preflight,
+    semanticFacts,
     plan,
     evidence,
     sources: search.sources,
