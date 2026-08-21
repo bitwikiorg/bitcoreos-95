@@ -2,7 +2,7 @@ import { HUB, WIKI, stripHtml } from './federated';
 import type { DelegatedCredential } from './delegated';
 import { discourseAsUser } from './delegated';
 
-const WIKI_UA = { 'user-agent': 'BITCOREOS-95/0.4 (+https://bitwiki.org)' };
+const WIKI_UA = { 'user-agent': 'BITCOREOS-95/0.5 (+https://bitwiki.org)' };
 
 async function json(url: URL | string, init?: RequestInit) {
   const response = await fetch(url, init);
@@ -67,13 +67,36 @@ async function wikiUser(username: string) {
   };
 }
 
+function normalizeSearch(data: any, state: 'bookmark' | 'tracking' | 'watching') {
+  const topics = Array.isArray(data?.topics) ? data.topics : [];
+  return topics.slice(0, 30).map((topic: any) => ({
+    id: Number(topic?.id || 0),
+    title: String(topic?.title || 'Untitled'),
+    slug: String(topic?.slug || 'topic'),
+    posts: Number(topic?.posts_count || 0),
+    views: Number(topic?.views || 0),
+    lastPostedAt: topic?.last_posted_at,
+    state,
+    url: `${HUB}/t/${topic?.slug || 'topic'}/${topic?.id}`,
+  })).filter((topic: any) => topic.id > 0);
+}
+
+async function delegatedTopicSet(credential: DelegatedCredential, filter: 'bookmarks' | 'tracking' | 'watching') {
+  const query = filter === 'bookmarks' ? 'in:bookmarks' : `in:${filter}`;
+  const data = await discourseAsUser(`/search.json?q=${encodeURIComponent(query)}`, credential);
+  return normalizeSearch(data, filter === 'bookmarks' ? 'bookmark' : filter);
+}
+
 export async function getPersonalOverview(username: string, delegated?: DelegatedCredential | null) {
-  const [profileResult, topicsResult, postsResult, wikiResult, notificationsResult] = await Promise.allSettled([
+  const [profileResult, topicsResult, postsResult, wikiResult, notificationsResult, bookmarksResult, trackingResult, watchingResult] = await Promise.allSettled([
     json(new URL(`/u/${encodeURIComponent(username)}.json`, HUB), { next: { revalidate: 45 } } as RequestInit),
     userActions(username, 4),
     userActions(username, 5),
     wikiUser(username),
     delegated ? discourseAsUser('/notifications.json?limit=20', delegated) : Promise.resolve(null),
+    delegated ? delegatedTopicSet(delegated, 'bookmarks') : Promise.resolve([]),
+    delegated ? delegatedTopicSet(delegated, 'tracking') : Promise.resolve([]),
+    delegated ? delegatedTopicSet(delegated, 'watching') : Promise.resolve([]),
   ]);
 
   const profile = profileResult.status === 'fulfilled' ? profileResult.value?.user || {} : {};
@@ -83,6 +106,9 @@ export async function getPersonalOverview(username: string, delegated?: Delegate
   const notifications = notificationsResult.status === 'fulfilled' && Array.isArray(notificationsResult.value?.notifications)
     ? notificationsResult.value.notifications.slice(0, 20).map((item: any) => ({ id: item.id, type: item.notification_type, read: Boolean(item.read), createdAt: item.created_at, data: item.data || {} }))
     : [];
+  const savedSets = [bookmarksResult, trackingResult, watchingResult]
+    .flatMap((result) => result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : []);
+  const saved = Array.from(new Map(savedSets.map((item: any) => [`${item.state}:${item.id}`, item])).values());
 
   return {
     username,
@@ -102,6 +128,7 @@ export async function getPersonalOverview(username: string, delegated?: Delegate
       connected: Boolean(delegated),
       scopes: delegated?.scopes || [],
       notifications,
+      saved,
     },
   };
 }
