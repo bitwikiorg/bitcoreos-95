@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import 'reactflow/dist/style.css';
 import './simplify.css';
+import './ophanim-relay.css';
 
 export const metadata: Metadata = {
   title: 'BITCOREOS-95',
