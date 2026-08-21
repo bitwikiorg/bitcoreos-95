@@ -7,7 +7,7 @@ import type { HydratedResource, Resource, SearchResponse } from '@/lib/resources
 type Mode = 'feed' | 'search' | 'agents';
 type HubOverview = { latest?: any[]; categories?: any[] };
 type WikiOverview = { recent?: any[]; categories?: any[] };
-type AgentData = { agents?: Array<{ index: number; name: string; username: string; intent: string; family: string }> };
+type AgentData = { registryUrl?: string; agents?: Array<{ index: number; name: string; username?: string; registryIdentity: string; intent: string; family: string }> };
 
 function compactDate(value?: string) {
   if (!value) return '';
@@ -155,13 +155,16 @@ export function Explorer() {
         {mode === 'agents' && (
           <div className="agent-directory sunken">
             <div className="explorer-empty agent-intro"><b>BIThub agent registry</b><span>Public constructs from the same registry used by the official B8 agent plugin.</span></div>
-            {(agents.agents || []).map((agent) => (
-              <a key={agent.index} href={`https://hub.bitwiki.org/u/${encodeURIComponent(agent.username)}`} target="_blank" rel="noreferrer" className="agent-row">
-                <span className="agent-index">{String(agent.index).padStart(2, '0')}</span>
-                <div><strong>{agent.name}</strong><p>{agent.intent}</p></div>
-                <small>{agent.family}</small>
-              </a>
-            ))}
+            {(agents.agents || []).map((agent) => {
+              const href = agent.username ? `https://hub.bitwiki.org/u/${encodeURIComponent(agent.username)}` : (agents.registryUrl || 'https://hub.bitwiki.org/t/30145');
+              return (
+                <a key={agent.index} href={href} target="_blank" rel="noreferrer" className="agent-row">
+                  <span className="agent-index">{String(agent.index).padStart(2, '0')}</span>
+                  <div><strong>{agent.name}</strong><p>{agent.intent}</p></div>
+                  <small>{agent.username ? `@${agent.username}` : agent.family}</small>
+                </a>
+              );
+            })}
           </div>
         )}
 
