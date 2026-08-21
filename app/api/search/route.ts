@@ -29,7 +29,6 @@ async function searchHub(query: string): Promise<Resource[]> {
 }
 
 async function searchWiki(query: string): Promise<Resource[]> {
-  // BITwiki's MediaWiki installation lives under /w; article URLs are rooted at /Title.
   const url = new URL('/w/api.php', WIKI);
   url.searchParams.set('action', 'query');
   url.searchParams.set('list', 'search');
@@ -38,7 +37,10 @@ async function searchWiki(query: string): Promise<Resource[]> {
   url.searchParams.set('format', 'json');
   url.searchParams.set('formatversion', '2');
   url.searchParams.set('origin', '*');
-  const response = await fetch(url, { next: { revalidate: 60 } });
+  const response = await fetch(url, {
+    headers: { 'user-agent': 'BITCOREOS-95/0.1 (+https://bitwiki.org)' },
+    next: { revalidate: 60 },
+  });
   if (!response.ok) throw new Error(`BITwiki search failed: ${response.status}`);
   const data = await response.json();
   const results = Array.isArray(data?.query?.search) ? data.query.search : [];
@@ -54,19 +56,36 @@ async function searchWiki(query: string): Promise<Resource[]> {
   }));
 }
 
+function failureMessage(result: PromiseSettledResult<Resource[]>) {
+  if (result.status === 'fulfilled') return null;
+  return result.reason instanceof Error ? result.reason.message : 'upstream request failed';
+}
+
 export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get('q')?.trim() ?? '';
-  if (!query) return NextResponse.json({ query, resources: [] });
+  if (!query) return NextResponse.json({ query, resources: [], sources: {} });
 
   const [hub, wiki] = await Promise.allSettled([searchHub(query), searchWiki(query)]);
-
-  if (hub.status === 'rejected') console.error(hub.reason);
-  if (wiki.status === 'rejected') console.error(wiki.reason);
 
   const resources = [
     ...(hub.status === 'fulfilled' ? hub.value : []),
     ...(wiki.status === 'fulfilled' ? wiki.value : []),
   ];
 
-  return NextResponse.json({ query, resources });
+  return NextResponse.json({
+    query,
+    resources,
+    sources: {
+      hub: {
+        ok: hub.status === 'fulfilled',
+        count: hub.status === 'fulfilled' ? hub.value.length : 0,
+        error: failureMessage(hub),
+      },
+      wiki: {
+        ok: wiki.status === 'fulfilled',
+        count: wiki.status === 'fulfilled' ? wiki.value.length : 0,
+        error: failureMessage(wiki),
+      },
+    },
+  });
 }
