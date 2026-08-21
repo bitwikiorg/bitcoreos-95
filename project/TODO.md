@@ -2,18 +2,20 @@
 
 Updated: 2026-08-21
 
-## Active — M1 Resource hydration + readers
+## Completed — M1 Resource hydration + readers
 
-- [ ] Add normalized hydrated-resource types.
-- [ ] Add BIThub topic hydration using public Discourse topic/post APIs.
-- [ ] Add BITwiki page hydration using MediaWiki Action API.
-- [ ] Add `/api/resource` hydration endpoint.
-- [ ] Make Explorer hydrate the selected result and render source content internally.
-- [ ] Make Ask ground from bounded hydrated source content, not only search snippets.
-- [ ] Make Research planning use bounded hydrated source content.
-- [ ] Verify production build and live Hub/Wiki hydration.
+- [x] Add normalized hydrated-resource types.
+- [x] Add BIThub topic hydration using public Discourse topic/post APIs.
+- [x] Add BITwiki page hydration using MediaWiki Action API.
+- [x] Add `/api/resource` hydration endpoint.
+- [x] Make Explorer hydrate the selected result and render source content internally.
+- [x] Make Ask ground from bounded hydrated source content, not only search snippets.
+- [x] Make Research planning use bounded hydrated source content.
+- [x] Verify production build and live Hub/Wiki hydration.
 
-## Next — M2 Identity + delegated BIThub
+Verified 2026-08-21 on production with BIThub topic hydration and BITwiki rendered-page fallback.
+
+## Active — M2 Identity + delegated BIThub
 
 - [ ] Configure `DISCOURSE_SSO_SECRET` and `SESSION_SECRET` in production.
 - [ ] Verify DiscourseConnect login/callback against BIThub.
@@ -22,13 +24,15 @@ Updated: 2026-08-21
 - [ ] Add bookmarks/tracked topics where scopes permit.
 - [ ] Do not use a master admin key as the generic user authority path.
 
-## Next — M3 Agent capability projection
+Blocker: production SSO secrets are not currently configured.
+
+## Parallel unblocked — M3 Agent capability projection
 
 - [ ] Add public agent-registry reader compatible with `agent.b8-plugin` registry semantics.
 - [ ] Surface agent profile/resources in Explorer/Research.
 - [ ] Map browser actions to canonical B8 capability names where applicable.
 
-## Next — M4 Canonical Research state
+## Parallel unblocked — M4 Canonical Research state
 
 - [ ] Query Cargo `Knowledge_requests`.
 - [ ] Add request duplicate/existing-page preflight.

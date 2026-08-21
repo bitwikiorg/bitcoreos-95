@@ -50,39 +50,54 @@ Actions should carry a `correlation_id` and `idempotency_key` so UI, n8n, BIThub
 - Minimal Win95 / engineering-codex lander.
 - Kordylewski Relay guide launcher.
 - Federated public BIThub + BITwiki search.
-- Explorer with normalized resource results.
-- Ask workspace with public Hub/Wiki grounding.
-- Research workspace that produces a preflight research packet.
+- Explorer with normalized resource results and hydrated internal source reader.
+- Ask workspace grounded with bounded hydrated Hub/Wiki source content.
+- Research workspace that uses hydrated internal evidence to produce a preflight research packet.
 - Ontology navigation graph.
 - BIThub and BITwiki overview APIs.
+- Generic `/api/resource` hydration endpoint.
+- BIThub topic hydration, including bounded post-stream expansion.
+- BITwiki page hydration using TextExtracts when available and rendered Action API parsing as fallback.
 - DiscourseConnect SSO scaffold and signed BITCOREOS session logic.
+
+## M1 verification
+
+Completed: 2026-08-21
+Implementation commits: `560d465`, `63e461e`
+
+Verified in production:
+
+- Next.js compile, lint/type validation, static generation, and deployment passed.
+- Public BIThub topic hydration returns real post content and metadata.
+- Public BITwiki page hydration returns real rendered page content, categories, revision metadata, and parser fallback when `extract` is empty.
+- `/explorer` and `/api/resource` return HTTP 200 in production for verified resources.
 
 ## Current limitations
 
-- Search results are still mostly snippets rather than hydrated source documents.
-- Explorer does not yet provide a complete first-class internal reader.
-- Ask and Research currently ground primarily from search excerpts.
-- Production SSO is scaffolded but not configured with secrets.
+- Production SSO is scaffolded but not configured with `DISCOURSE_SSO_SECRET` and `SESSION_SECRET`.
 - Delegated Discourse User API Key flow is not implemented.
 - Agent registry is not surfaced in BITCOREOS-95.
 - Cargo `Knowledge_requests` is not yet the Research state authority.
 - n8n action broker is not yet implemented.
 - Ontology is not yet driven by full SMW/Cargo semantic relationships.
 - Cross-system provenance links are not yet first-class objects.
+- BIThub hydration is intentionally bounded to protect the public reader from unbounded topic expansion.
 
 ## Active milestone
 
-**M1 — Resource hydration and internal readers**
+**M2 — Identity + delegated personal BIThub**
 
-Goal: make Explorer, Ask, and Research operate on source content rather than search snippets alone.
+Immediate dependency: configure production DiscourseConnect/session secrets before live SSO can be verified.
 
 Required outcome:
 
-1. Hydrate BIThub topics into readable posts and topic metadata.
-2. Hydrate BITwiki pages into full plain-text page content plus categories/revision metadata.
-3. Add a generic resource hydration API.
-4. Render hydrated content inside Explorer without forcing users out to the source site.
-5. Feed bounded hydrated evidence into Ask and Research while preserving source links and provenance.
+1. Verify production DiscourseConnect identity round trip.
+2. Keep verified identity separate from delegated API authority.
+3. Implement a scoped Discourse User API Key authorization flow.
+4. Add user-scoped reads such as notifications/bookmarks/tracked resources only when delegated scope permits.
+5. Keep sensitive/multi-system mutations behind n8n rather than turning the browser client into an admin proxy.
+
+Parallel unblocked work while SSO secrets are unavailable: M3 public B8 agent-registry projection and M4 read-only Cargo `Knowledge_requests` discovery.
 
 ## UI invariants
 
