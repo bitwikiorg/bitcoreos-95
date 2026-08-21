@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { HydratedResource, Resource, SearchResponse } from '@/lib/resources';
+import { SemanticFacts, type SemanticFact } from './SemanticFacts';
 
 type Mode = 'feed' | 'search' | 'agents';
 type HubOverview = { latest?: any[]; categories?: any[] };
@@ -25,6 +26,7 @@ export function Explorer() {
   const [agents, setAgents] = useState<AgentData>({});
   const [selected, setSelected] = useState<Resource | null>(null);
   const [detail, setDetail] = useState<HydratedResource | null>(null);
+  const [semanticFacts, setSemanticFacts] = useState<SemanticFact[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filter, setFilter] = useState<'all' | 'hub' | 'wiki'>('all');
   const [loading, setLoading] = useState(false);
@@ -46,6 +48,7 @@ export function Explorer() {
   }, []);
 
   useEffect(() => {
+    setSemanticFacts([]);
     if (!selected) { setDetail(null); return; }
     const params = new URLSearchParams({ source: selected.source });
     if (selected.source === 'hub') {
@@ -57,11 +60,19 @@ export function Explorer() {
     const controller = new AbortController();
     setDetail(null);
     setDetailLoading(true);
-    fetch(`/api/resource?${params.toString()}`, { signal: controller.signal })
-      .then(async (response) => response.ok ? response.json() : Promise.reject(new Error('source_read_failed')))
-      .then(setDetail)
-      .catch(() => null)
-      .finally(() => { if (!controller.signal.aborted) setDetailLoading(false); });
+    const reads: Promise<unknown>[] = [
+      fetch(`/api/resource?${params.toString()}`, { signal: controller.signal })
+        .then(async (response) => response.ok ? response.json() : Promise.reject(new Error('source_read_failed')))
+        .then(setDetail),
+    ];
+    if (selected.source === 'wiki') {
+      reads.push(
+        fetch(`/api/wiki/semantic?title=${encodeURIComponent(selected.title)}`, { signal: controller.signal })
+          .then((response) => response.ok ? response.json() : null)
+          .then((payload) => setSemanticFacts(Array.isArray(payload?.facts) ? payload.facts : [])),
+      );
+    }
+    Promise.allSettled(reads).finally(() => { if (!controller.signal.aborted) setDetailLoading(false); });
     return () => controller.abort();
   }, [selected]);
 
@@ -189,6 +200,12 @@ export function Explorer() {
               <button onClick={() => useResource('research')}>Research</button>
             </div>
             <div className="reader-text simple-reader">{detailLoading ? 'Reading source…' : (detail?.content || selected.excerpt || 'No readable body returned.')}</div>
+            {selected.source === 'wiki' && (
+              <details className="reader-semantic">
+                <summary>Semantic relations {semanticFacts.length ? `(${semanticFacts.length})` : ''}</summary>
+                <SemanticFacts facts={semanticFacts} />
+              </details>
+            )}
           </>
         )}
       </aside>
