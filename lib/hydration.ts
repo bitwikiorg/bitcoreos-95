@@ -80,10 +80,10 @@ export async function hydrateHubTopic(topicId: number): Promise<HydratedResource
     .sort((a, b) => a.postNumber - b.postNumber)
     .slice(0, MAX_HUB_POSTS);
 
-  const content = posts
+  const fullContent = posts
     .map((post) => `@${post.username} · post ${post.postNumber}\n${post.text}`)
-    .join('\n\n---\n\n')
-    .slice(0, MAX_RESOURCE_CHARS);
+    .join('\n\n---\n\n');
+  const content = fullContent.slice(0, MAX_RESOURCE_CHARS);
 
   const totalPosts = Number(topic?.posts_count || stream.length || posts.length);
   const title = String(topic?.title || `BIThub topic ${topicId}`);
@@ -99,7 +99,7 @@ export async function hydrateHubTopic(topicId: number): Promise<HydratedResource
     author: posts[0]?.username,
     score: Number(topic?.views || 0),
     content,
-    complete: totalPosts <= posts.length && content.length < MAX_RESOURCE_CHARS,
+    complete: totalPosts <= posts.length && fullContent.length <= MAX_RESOURCE_CHARS,
     details: { posts },
     metadata: {
       topicId,
@@ -114,9 +114,9 @@ export async function hydrateHubTopic(topicId: number): Promise<HydratedResource
   };
 }
 
-async function wikiAction(params: Record<string, string>): Promise<JsonObject> {
+async function wikiApi(action: string, params: Record<string, string>): Promise<JsonObject> {
   const url = new URL('/w/api.php', WIKI);
-  url.searchParams.set('action', 'query');
+  url.searchParams.set('action', action);
   url.searchParams.set('format', 'json');
   url.searchParams.set('formatversion', '2');
   url.searchParams.set('origin', '*');
@@ -127,11 +127,46 @@ async function wikiAction(params: Record<string, string>): Promise<JsonObject> {
   } as RequestInit);
 }
 
+function renderedHtmlToText(value: string) {
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<br\s*\/?\s*>/gi, '\n')
+    .replace(/<li\b[^>]*>/gi, '\n• ')
+    .replace(/<\/(p|div|li|h[1-6]|tr|table|section|blockquote)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;|&#x27;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+async function wikiRenderedPage(title: string) {
+  const data = await wikiApi('parse', {
+    page: title,
+    prop: 'text|sections|revid|displaytitle',
+    disablelimitreport: '1',
+    disableeditsection: '1',
+  });
+  const html = typeof data?.parse?.text === 'string' ? data.parse.text : '';
+  const sections = Array.isArray(data?.parse?.sections) ? data.parse.sections : [];
+  return {
+    text: renderedHtmlToText(html),
+    sectionCount: sections.length,
+  };
+}
+
 export async function hydrateWikiPage(title: string): Promise<HydratedResource> {
   const requestedTitle = title.trim();
   if (!requestedTitle) throw new Error('missing_title');
 
-  const data = await wikiAction({
+  const data = await wikiApi('query', {
     titles: requestedTitle,
     redirects: '1',
     prop: 'extracts|info|categories|revisions',
@@ -148,7 +183,17 @@ export async function hydrateWikiPage(title: string): Promise<HydratedResource> 
   if (!page) throw new Error('wiki_page_not_found');
 
   const canonicalTitle = String(page.title || requestedTitle);
-  const fullContent = String(page.extract || '');
+  let fullContent = String(page.extract || '').trim();
+  let contentSource = 'extracts';
+  let sectionCount: number | undefined;
+
+  if (!fullContent) {
+    const rendered = await wikiRenderedPage(canonicalTitle);
+    fullContent = rendered.text;
+    sectionCount = rendered.sectionCount;
+    contentSource = 'parse';
+  }
+
   const content = fullContent.slice(0, MAX_RESOURCE_CHARS);
   const categories = Array.isArray(page.categories)
     ? page.categories
@@ -186,6 +231,8 @@ export async function hydrateWikiPage(title: string): Promise<HydratedResource> 
       length: page.length,
       touched: page.touched,
       categories: categories.length,
+      sections: sectionCount,
+      contentSource,
       revisionId: revision?.revid,
       revisionTimestamp: revision?.timestamp,
       revisionUser: revision?.user,
