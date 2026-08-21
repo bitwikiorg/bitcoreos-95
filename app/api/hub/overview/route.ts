@@ -8,15 +8,17 @@ async function read(path: string) {
 }
 
 export async function GET() {
-  const [latestResult, categoriesResult, topResult] = await Promise.allSettled([
+  const [latestResult, categoriesResult, topResult, aboutResult] = await Promise.allSettled([
     read('/latest.json'),
     read('/categories.json'),
     read('/top.json?period=weekly'),
+    read('/about.json'),
   ]);
 
   const latestData = latestResult.status === 'fulfilled' ? latestResult.value : null;
   const categoriesData = categoriesResult.status === 'fulfilled' ? categoriesResult.value : null;
   const topData = topResult.status === 'fulfilled' ? topResult.value : null;
+  const aboutData = aboutResult.status === 'fulfilled' ? aboutResult.value : null;
 
   const latest = [...(latestData?.topic_list?.topics ?? [])]
     .sort((a: any, b: any) => Date.parse(b.last_posted_at ?? b.created_at ?? '0') - Date.parse(a.last_posted_at ?? a.created_at ?? '0'))
@@ -59,15 +61,27 @@ export async function GET() {
     likeCount: topic.like_count,
   }));
 
+  const rawStats = aboutData?.about?.stats ?? {};
+  const stats = {
+    topics: typeof rawStats.topic_count === 'number' ? rawStats.topic_count : undefined,
+    posts: typeof rawStats.post_count === 'number' ? rawStats.post_count : undefined,
+    users: typeof rawStats.user_count === 'number' ? rawStats.user_count : undefined,
+    activeUsers7Days: typeof rawStats.active_users_7_days === 'number' ? rawStats.active_users_7_days : undefined,
+    topics7Days: typeof rawStats.topics_7_days === 'number' ? rawStats.topics_7_days : undefined,
+    posts7Days: typeof rawStats.posts_7_days === 'number' ? rawStats.posts_7_days : undefined,
+  };
+
   return NextResponse.json({
     origin: HUB,
     latest,
     categories,
     top,
+    stats,
     health: {
       latest: latestResult.status === 'fulfilled',
       categories: categoriesResult.status === 'fulfilled',
       top: topResult.status === 'fulfilled',
+      stats: aboutResult.status === 'fulfilled',
     },
   });
 }

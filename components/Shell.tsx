@@ -7,7 +7,6 @@ import { Explorer } from './Explorer';
 import { OntologyGraph } from './OntologyGraph';
 import { ChatWorkspace } from './ChatWorkspace';
 import { ResearchWorkspace } from './ResearchWorkspace';
-import { OphanimSeal } from './OphanimSeal';
 
 export type View = 'cockpit' | 'explorer' | 'ontology' | 'ask' | 'research';
 
@@ -17,20 +16,19 @@ type AuthState = {
   configured: boolean;
 };
 
-const routes: Array<{ id: View; label: string; href: string; mark: string }> = [
-  { id: 'cockpit', label: 'Cockpit', href: '/', mark: '⌂' },
-  { id: 'explorer', label: 'Explorer', href: '/explorer', mark: '⌕' },
-  { id: 'ontology', label: 'Ontology', href: '/ontology', mark: '◇' },
-  { id: 'ask', label: 'Ask', href: '/ask', mark: '◉' },
-  { id: 'research', label: 'Research', href: '/research', mark: '✦' },
+const routes: Array<{ id: Exclude<View, 'cockpit'>; label: string; href: string }> = [
+  { id: 'explorer', label: 'Explorer', href: '/explorer' },
+  { id: 'ontology', label: 'Ontology', href: '/ontology' },
+  { id: 'ask', label: 'Ask', href: '/ask' },
+  { id: 'research', label: 'Research', href: '/research' },
 ];
 
 const titles: Record<View, string> = {
-  cockpit: 'Research Cockpit',
-  explorer: 'Hub + Wiki Explorer',
-  ontology: 'Ontology Schema Navigator',
-  ask: 'Grounded Research Chat',
-  research: 'Research Deployment',
+  cockpit: 'Navigator',
+  explorer: 'Explorer',
+  ontology: 'Ontology',
+  ask: 'Ask',
+  research: 'Research',
 };
 
 export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
@@ -60,11 +58,6 @@ export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  function navigate(view: View) {
-    const route = routes.find((item) => item.id === view);
-    if (route) router.push(route.href);
-  }
-
   function runCommand(event: FormEvent) {
     event.preventDefault();
     const raw = command.trim();
@@ -79,15 +72,13 @@ export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
     } else if (action === 'research') {
       if (value) sessionStorage.setItem('bitcoreos-research-seed', value);
       router.push('/research');
-    } else if (action === 'wiki' || action === 'hub' || action === 'search' || action === 'find') {
-      sessionStorage.setItem('bitcoreos-search-seed', value || action);
-      router.push('/explorer');
     } else if (action === 'ontology' || action === 'graph') {
       router.push('/ontology');
     } else if (action === 'home' || action === 'cockpit') {
       router.push('/');
     } else {
-      sessionStorage.setItem('bitcoreos-search-seed', raw);
+      const query = action === 'search' || action === 'find' || action === 'hub' || action === 'wiki' ? value : raw;
+      sessionStorage.setItem('bitcoreos-search-seed', query);
       router.push('/explorer');
     }
     setCommand('');
@@ -103,39 +94,27 @@ export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
     <main className="os-desktop">
       <section className="os-window raised">
         <header className="os-titlebar">
-          <div className="os-brand"><span className="brand-seal">◎</span><b>BITCOREOS-95</b><span className="title-divider">//</span><span>{titles[initialView]}</span></div>
-          <div className="window-caps" aria-hidden="true"><i>_</i><i>□</i><i>×</i></div>
+          <button className="os-brand-button" onClick={() => router.push('/')} aria-label="Open BITCOREOS-95 navigator">
+            <b>BITCOREOS-95</b><span>// {titles[initialView]}</span>
+          </button>
+          <a className="title-hub-link" href="https://hub.bitwiki.org" target="_blank" rel="noreferrer">BIThub ↗</a>
         </header>
 
-        <div className="os-tabstrip" role="navigation" aria-label="Primary cockpit navigation">
+        <nav className="os-tabstrip" aria-label="Primary navigation">
           {routes.map((route) => (
-            <button key={route.id} data-active={initialView === route.id} onClick={() => navigate(route.id)}>
-              <span>{route.mark}</span>{route.label}
-            </button>
+            <button key={route.id} data-active={initialView === route.id} onClick={() => router.push(route.href)}>{route.label}</button>
           ))}
           <div className="os-tab-spacer" />
-          <button className="command-trigger" onClick={() => setCommandOpen(true)}>⌘ Command <kbd>Ctrl K</kbd></button>
+          <button className="command-trigger compact-command" onClick={() => setCommandOpen(true)} title="Command palette — Ctrl K">⌘</button>
           {auth.user ? (
             <div className="identity-cluster">
               <a href={`https://hub.bitwiki.org/u/${encodeURIComponent(auth.user.username)}`} target="_blank" rel="noreferrer" className="identity-button">@{auth.user.username}</a>
-              <button onClick={logout}>Sign out</button>
+              <button onClick={logout}>Out</button>
             </div>
           ) : auth.configured ? (
-            <a className="identity-button" href="/api/auth/login">Sign in with BIThub</a>
-          ) : (
-            <span className="identity-off" title="Set DISCOURSE_SSO_SECRET and SESSION_SECRET on Vercel to enable BIThub SSO">Guest</span>
-          )}
-        </div>
-
-        <div className="os-contextbar">
-          <div className="breadcrumb"><span>BIT Ecosystem</span><b>›</b><span>{titles[initialView]}</span></div>
-          <div className="context-actions">
-            {auth.user && auth.profile && <span className="profile-signal">TL{auth.profile.trustLevel ?? '—'} · {auth.profile.postCount ?? '—'} posts</span>}
-            <button onClick={() => { sessionStorage.setItem('bitcoreos-search-seed', ''); router.push('/explorer'); }}>⌕ Find</button>
-            <a href="https://hub.bitwiki.org" target="_blank" rel="noreferrer">BIThub ↗</a>
-            <a href="https://bitwiki.org" target="_blank" rel="noreferrer">BITwiki ↗</a>
-          </div>
-        </div>
+            <a className="identity-button" href="/api/auth/login">Sign in</a>
+          ) : null}
+        </nav>
 
         <div className="os-content">
           {initialView === 'cockpit' && <Cockpit />}
@@ -144,25 +123,16 @@ export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
           {initialView === 'ask' && <ChatWorkspace />}
           {initialView === 'research' && <ResearchWorkspace />}
         </div>
-
-        <footer className="os-statusbar">
-          <span><i className="status-lamp" /> BIThub + BITwiki public layer</span>
-          <span>{auth.user ? `session: @${auth.user.username}` : 'session: guest'}</span>
-          <span>main · research cockpit</span>
-        </footer>
       </section>
 
       {commandOpen && (
         <div className="command-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setCommandOpen(false); }}>
           <form className="command-palette win-panel raised" onSubmit={runCommand}>
-            <div className="mini-title">COMMAND PALETTE // NOT A SEPARATE TERMINAL</div>
-            <div className="command-line sunken"><span>BIT&gt;</span><input autoFocus value={command} onChange={(event) => setCommand(event.target.value)} placeholder="search carbon sink · ask what is a CORE · research Kordylewski plasma" /></div>
-            <div className="command-help"><span>search &lt;query&gt;</span><span>ask &lt;question&gt;</span><span>research &lt;request&gt;</span><span>ontology</span></div>
+            <div className="mini-title">COMMAND</div>
+            <div className="command-line sunken"><span>BIT&gt;</span><input autoFocus value={command} onChange={(event) => setCommand(event.target.value)} placeholder="search … · ask … · research … · ontology" /></div>
           </form>
         </div>
       )}
-
-      <OphanimSeal />
     </main>
   );
 }
