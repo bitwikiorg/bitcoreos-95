@@ -27,6 +27,36 @@ export type Resource = {
   metadata?: Record<string, unknown>;
 };
 
+export type ResourcePost = {
+  id: number;
+  postNumber: number;
+  username: string;
+  displayName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  text: string;
+  url?: string;
+};
+
+export type HydratedResourceDetails = {
+  posts?: ResourcePost[];
+  categories?: string[];
+  canonicalTitle?: string;
+  revision?: {
+    id?: number;
+    timestamp?: string;
+    user?: string;
+    comment?: string;
+  };
+  hydrationError?: string;
+};
+
+export type HydratedResource = Resource & {
+  content: string;
+  complete: boolean;
+  details?: HydratedResourceDetails;
+};
+
 export type SourceHealth = {
   ok: boolean;
   count: number;

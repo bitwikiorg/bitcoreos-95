@@ -1,0 +1,107 @@
+/* M1 resource reader: keep reading dense source material inside Explorer without changing the sparse lander. */
+
+.explorer-shell {
+  grid-template-columns: 220px minmax(360px, 1fr) minmax(340px, 420px);
+}
+
+.inspector-actions-inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin: 8px 0 10px;
+}
+
+.inspector-actions-inline > * {
+  flex: 1 1 auto;
+  min-width: 78px;
+}
+
+.inspector-reader {
+  margin-top: 12px;
+  border-top: 2px solid #4f4b45;
+  background: #f8f5ed;
+}
+
+.reader-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 7px;
+  border-bottom: 1px solid #9c958a;
+  background: #ded8cd;
+  font: 700 9px var(--mono);
+  letter-spacing: .08em;
+}
+
+.reader-heading small {
+  font-weight: 400;
+  letter-spacing: 0;
+  color: #69635b;
+}
+
+.reader-state {
+  padding: 13px 9px;
+  color: #6b655e;
+  font: 10px/1.45 var(--mono);
+}
+
+.reader-error {
+  color: #7b2929;
+}
+
+.reader-posts {
+  display: flex;
+  flex-direction: column;
+}
+
+.reader-post {
+  padding: 9px;
+  border-bottom: 1px dotted #a59e93;
+  background: #fffdf7;
+}
+
+.reader-post:nth-child(even) {
+  background: #f0ece3;
+}
+
+.reader-post header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  font: 9px var(--mono);
+}
+
+.reader-post header b {
+  color: #174e48;
+}
+
+.reader-post header span {
+  color: #726c63;
+  text-align: right;
+}
+
+.reader-post > div,
+.reader-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #332f2b;
+  font: 11px/1.48 var(--sans);
+}
+
+.reader-text {
+  padding: 10px;
+  background: #fffdf7;
+}
+
+@media (max-width: 1180px) {
+  .explorer-shell {
+    grid-template-columns: 180px minmax(340px, 1fr) 310px;
+  }
+}
+
+@media (max-width: 900px) {
+  .explorer-shell {
+    grid-template-columns: 1fr;
+  }
+}

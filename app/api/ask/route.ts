@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { federatedSearch } from '@/lib/federated';
+import { hydrateResources } from '@/lib/hydration';
+import type { HydratedResource } from '@/lib/resources';
 
 const WINDOW_MS = 5 * 60 * 1000;
 const MAX_REQUESTS = 12;
@@ -21,10 +23,14 @@ function limited(request: NextRequest) {
   return current.count > MAX_REQUESTS;
 }
 
-function evidenceText(resources: any[]) {
+function evidenceText(resources: HydratedResource[]) {
   return resources.map((resource, index) => {
     const prefix = resource.source === 'hub' ? 'H' : 'W';
-    return `[${prefix}${index + 1}] ${resource.title}\nURL: ${resource.url}\nTYPE: ${resource.kind}\nEXCERPT: ${resource.excerpt || '(title/metadata match only)'}`;
+    const body = (resource.content || resource.excerpt || '(no readable body)').slice(0, 4_800);
+    const state = resource.details?.hydrationError
+      ? `HYDRATION: fallback (${resource.details.hydrationError})`
+      : `HYDRATION: ${resource.complete ? 'complete' : 'bounded'}`;
+    return `[${prefix}${index + 1}] ${resource.title}\nURL: ${resource.url}\nTYPE: ${resource.kind}\n${state}\nSOURCE CONTENT:\n${body}`;
   }).join('\n\n');
 }
 
@@ -41,7 +47,8 @@ export async function POST(request: NextRequest) {
   if (!question) return NextResponse.json({ error: 'missing_question' }, { status: 400 });
 
   const search = await federatedSearch(question, 6);
-  const evidence = search.resources.slice(0, 10);
+  const evidence = search.resources.slice(0, 6);
+  const hydratedEvidence = await hydrateResources(evidence, 6);
   const credential = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
   const model = process.env.BITHUB_PUBLIC_MODEL || 'google/gemini-3.6-flash';
 
@@ -50,20 +57,22 @@ export async function POST(request: NextRequest) {
       error: 'ai_gateway_not_configured',
       evidence,
       sources: search.sources,
+      hydratedCount: hydratedEvidence.filter((item) => !item.details?.hydrationError).length,
       model: null,
     }, { status: 503 });
   }
 
   const system = [
     'You are the public BIThub + BITwiki research guide inside BITCOREOS-95.',
-    'Answer using the supplied public evidence as the authority for claims about BIThub and BITwiki.',
+    'Answer using the supplied public source content as the authority for claims about BIThub and BITwiki.',
+    'Search snippets are discovery signals; hydrated source content is stronger evidence.',
     'Do not invent private content, permissions, user data, platform features, or source facts.',
     'If evidence is insufficient, say what is missing and suggest a narrower search.',
     'Cite evidence inline with bracket labels such as [H1] and [W2].',
     'Prefer concise operational explanations and direct navigation guidance.',
     '',
     'PUBLIC EVIDENCE:',
-    evidenceText(evidence),
+    evidenceText(hydratedEvidence),
   ].join('\n');
 
   const upstream = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
@@ -90,6 +99,7 @@ export async function POST(request: NextRequest) {
       detail: data?.error?.message ?? data?.error ?? 'upstream failure',
       evidence,
       sources: search.sources,
+      hydratedCount: hydratedEvidence.filter((item) => !item.details?.hydrationError).length,
       model,
     }, { status: 502 });
   }
@@ -99,6 +109,7 @@ export async function POST(request: NextRequest) {
     answer: typeof answer === 'string' ? answer : 'No answer returned.',
     evidence,
     sources: search.sources,
+    hydratedCount: hydratedEvidence.filter((item) => !item.details?.hydrationError).length,
     model: data?.model ?? model,
   });
 }

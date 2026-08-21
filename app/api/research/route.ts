@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { federatedSearch } from '@/lib/federated';
+import { hydrateResources } from '@/lib/hydration';
 
 function fallbackPlan(request: string, evidence: any[]) {
   const candidate = request.replace(/[^a-zA-Z0-9\s:&-]/g, '').trim().slice(0, 90) || 'Research request';
@@ -24,7 +25,8 @@ export async function POST(request: NextRequest) {
   if (!researchRequest) return NextResponse.json({ error: 'missing_request' }, { status: 400 });
 
   const search = await federatedSearch(researchRequest, 8);
-  const evidence = search.resources.slice(0, 12);
+  const evidence = search.resources.slice(0, 8);
+  const hydratedEvidence = await hydrateResources(evidence, 8);
   const credential = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
   const model = process.env.BITHUB_RESEARCH_MODEL || process.env.BITHUB_PUBLIC_MODEL || 'google/gemini-3.6-flash';
 
@@ -32,7 +34,12 @@ export async function POST(request: NextRequest) {
   let aiPlanned = false;
 
   if (credential) {
-    const sourceText = evidence.map((item, index) => `${index + 1}. [${item.source.toUpperCase()}] ${item.title}\n${item.excerpt || ''}\n${item.url}`).join('\n\n');
+    const sourceText = hydratedEvidence.map((item, index) => {
+      const label = item.source === 'hub' ? `H${index + 1}` : `W${index + 1}`;
+      const content = (item.content || item.excerpt || '').slice(0, 4_500);
+      return `[${label}] ${item.title}\n${item.url}\n${content}`;
+    }).join('\n\n');
+
     const upstream = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -45,7 +52,7 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: 'Design a rigorous research packet for a future BITwiki page. Internal BIThub/BITwiki evidence is context, not automatically proof. Separate established evidence from gaps. Return JSON only.',
+            content: 'Design a rigorous research packet for a future BITwiki page. Internal BIThub/BITwiki source content is context, not automatically proof. Separate established evidence from gaps. Return JSON only.',
           },
           {
             role: 'user',
@@ -99,6 +106,7 @@ export async function POST(request: NextRequest) {
     plan,
     evidence,
     sources: search.sources,
+    hydratedCount: hydratedEvidence.filter((item) => !item.details?.hydrationError).length,
     aiPlanned,
     execution: 'unassigned',
   });

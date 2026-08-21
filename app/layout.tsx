@@ -3,6 +3,7 @@ import './globals.css';
 import 'reactflow/dist/style.css';
 import './simplify.css';
 import './ophanim-relay.css';
+import './resource-reader.css';
 
 export const metadata: Metadata = {
   title: 'BITCOREOS-95',

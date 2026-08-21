@@ -2,16 +2,25 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Resource, SearchResponse } from '@/lib/resources';
+import type { HydratedResource, Resource, SearchResponse } from '@/lib/resources';
 
 type HubOverview = { categories?: Array<{ id: number; name: string; topicCount?: number }> };
 type WikiOverview = { categories?: Array<{ name: string; pages?: number }> };
+
+function compactDate(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
 
 export function Explorer() {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [data, setData] = useState<SearchResponse | null>(null);
   const [selected, setSelected] = useState<Resource | null>(null);
+  const [detail, setDetail] = useState<HydratedResource | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [hub, setHub] = useState<HubOverview | null>(null);
   const [wiki, setWiki] = useState<WikiOverview | null>(null);
   const [filter, setFilter] = useState<'all' | 'hub' | 'wiki'>('all');
@@ -30,6 +39,49 @@ export function Explorer() {
     ]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!selected) {
+      setDetail(null);
+      setDetailError(null);
+      return;
+    }
+
+    const params = new URLSearchParams({ source: selected.source });
+    if (selected.source === 'hub') {
+      const topicId = Number(selected.metadata?.topicId || selected.id.replace(/^hub:/, ''));
+      if (!Number.isInteger(topicId) || topicId <= 0) {
+        setDetail(null);
+        setDetailError('This BIThub result does not expose a readable topic id.');
+        return;
+      }
+      params.set('topicId', String(topicId));
+    } else {
+      params.set('title', selected.title);
+    }
+
+    const controller = new AbortController();
+    setDetail(null);
+    setDetailError(null);
+    setDetailLoading(true);
+
+    fetch(`/api/resource?${params.toString()}`, { signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload?.error || `HTTP ${response.status}`);
+        return payload as HydratedResource;
+      })
+      .then(setDetail)
+      .catch((error) => {
+        if (error instanceof Error && error.name === 'AbortError') return;
+        setDetailError(error instanceof Error ? error.message : 'Unable to hydrate this resource.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDetailLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [selected]);
 
   async function search(value = query) {
     const q = value.trim();
@@ -68,6 +120,8 @@ export function Explorer() {
       router.push('/ask');
     }
   }
+
+  const inspected = detail ?? selected;
 
   return (
     <div className="explorer-shell">
@@ -117,22 +171,48 @@ export function Explorer() {
       </section>
 
       <aside className="resource-inspector win-panel raised">
-        <div className="mini-title">INSPECTOR // RESOURCE</div>
-        {!selected && <div className="inspector-empty">Select a result to inspect it without leaving the cockpit.</div>}
-        {selected && (
+        <div className="mini-title">INSPECTOR // SOURCE READER</div>
+        {!selected && <div className="inspector-empty">Select a result to inspect the source without leaving the cockpit.</div>}
+        {selected && inspected && (
           <>
-            <div className={`inspector-source ${selected.source}`}>{selected.source === 'hub' ? 'BIThub' : 'BITwiki'} · {selected.kind}</div>
-            <h2>{selected.title}</h2>
-            <p>{selected.excerpt || 'No excerpt supplied by the source API.'}</p>
+            <div className={`inspector-source ${inspected.source}`}>{inspected.source === 'hub' ? 'BIThub' : 'BITwiki'} · {inspected.kind}</div>
+            <h2>{inspected.title}</h2>
+            <p>{inspected.excerpt || 'No excerpt supplied by the source API.'}</p>
+            <div className="inspector-actions inspector-actions-inline">
+              <a href={inspected.url} target="_blank" rel="noreferrer">Open source ↗</a>
+              <button onClick={() => useResource('ask')}>Ask</button>
+              <button onClick={() => useResource('research')}>Research</button>
+            </div>
             <dl>
-              {Object.entries(selected.metadata ?? {}).slice(0, 8).map(([key, value]) => (
+              {Object.entries(inspected.metadata ?? {}).slice(0, 10).map(([key, value]) => (
                 <div key={key}><dt>{key}</dt><dd>{String(value ?? '—')}</dd></div>
               ))}
             </dl>
-            <div className="inspector-actions">
-              <a href={selected.url} target="_blank" rel="noreferrer">Open source ↗</a>
-              <button onClick={() => useResource('ask')}>Ask about this</button>
-              <button onClick={() => useResource('research')}>Research from this</button>
+
+            <div className="inspector-reader">
+              <div className="reader-heading">
+                <span>READER // HYDRATED SOURCE</span>
+                {detail && <small>{detail.complete ? 'complete' : 'bounded view'}</small>}
+              </div>
+              {detailLoading && <div className="reader-state">Loading source content…</div>}
+              {detailError && <div className="reader-state reader-error">{detailError}</div>}
+              {detail?.details?.posts?.length ? (
+                <div className="reader-posts">
+                  {detail.details.posts.map((post) => (
+                    <article className="reader-post" key={post.id}>
+                      <header>
+                        <b>@{post.username}</b>
+                        <span>#{post.postNumber}{post.createdAt ? ` · ${compactDate(post.createdAt)}` : ''}</span>
+                      </header>
+                      <div>{post.text || 'Empty post.'}</div>
+                    </article>
+                  ))}
+                </div>
+              ) : detail?.content ? (
+                <div className="reader-text">{detail.content}</div>
+              ) : !detailLoading && !detailError ? (
+                <div className="reader-state">No readable source body was returned.</div>
+              ) : null}
             </div>
           </>
         )}
