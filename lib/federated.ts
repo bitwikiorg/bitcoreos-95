@@ -6,13 +6,15 @@ const WIKI_UA = { 'user-agent': 'BITCOREOS-95/0.2 (+https://bitwiki.org)' };
 
 export function stripHtml(value = '') {
   return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;|&#x27;/g, "'")
+    .replace(/&amp;/g, '&')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -34,24 +36,35 @@ export async function searchHub(query: string, limit = 12): Promise<Resource[]> 
   url.searchParams.set('q', query);
   const data = await fetchJson(url, { next: { revalidate: 45 } } as RequestInit);
   const topics = Array.isArray(data?.topics) ? data.topics : [];
+  const posts = Array.isArray(data?.posts) ? data.posts : [];
+  const bestPostByTopic = new Map<number, any>();
+  for (const post of posts) {
+    const topicId = Number(post?.topic_id);
+    if (topicId && !bestPostByTopic.has(topicId)) bestPostByTopic.set(topicId, post);
+  }
 
-  return topics.slice(0, limit).map((topic: any) => ({
-    id: `hub:${topic.id}`,
-    source: 'hub' as const,
-    kind: 'topic' as const,
-    title: topic.title ?? 'Untitled topic',
-    excerpt: stripHtml(topic.blurb ?? ''),
-    url: `${HUB}/t/${topic.slug}/${topic.id}`,
-    tags: Array.isArray(topic.tags) ? topic.tags : [],
-    score: Number(topic.posts_count ?? 0),
-    metadata: {
-      topicId: topic.id,
-      categoryId: topic.category_id,
-      posts: topic.posts_count,
-      views: topic.views,
-      lastPostedAt: topic.last_posted_at,
-    },
-  }));
+  return topics.slice(0, limit).map((topic: any) => {
+    const hit = bestPostByTopic.get(Number(topic.id));
+    return {
+      id: `hub:${topic.id}`,
+      source: 'hub' as const,
+      kind: 'topic' as const,
+      title: topic.title ?? 'Untitled topic',
+      excerpt: stripHtml(hit?.blurb ?? topic.blurb ?? ''),
+      url: `${HUB}/t/${topic.slug}/${topic.id}`,
+      tags: Array.isArray(topic.tags) ? topic.tags : [],
+      author: hit?.username,
+      score: Number(topic.posts_count ?? 0),
+      metadata: {
+        topicId: topic.id,
+        categoryId: topic.category_id,
+        posts: topic.posts_count,
+        views: topic.views,
+        lastPostedAt: topic.last_posted_at,
+        matchedPostNumber: hit?.post_number,
+      },
+    };
+  });
 }
 
 async function wikiAction(params: Record<string, string>) {
@@ -96,8 +109,6 @@ function dedupe(resources: Resource[], limit: number) {
 export async function searchWiki(query: string, limit = 12): Promise<Resource[]> {
   const found: Resource[] = [];
 
-  // MediaWiki REST search is the primary discovery path: it carries excerpts,
-  // descriptions and thumbnails when BITwiki has them.
   try {
     const rest = new URL('/w/rest.php/v1/search/page', WIKI);
     rest.searchParams.set('q', query);
@@ -106,7 +117,7 @@ export async function searchWiki(query: string, limit = 12): Promise<Resource[]>
     const pages = Array.isArray(data?.pages) ? data.pages : [];
     found.push(...pages.map((page: any) => wikiResource(page, 'rest')));
   } catch {
-    // Action API below remains a fully functional fallback.
+    // Action API below remains the fallback.
   }
 
   const exact = await wikiAction({ titles: query, redirects: '1', prop: 'info|extracts', exintro: '1', explaintext: '1', exchars: '420' });
@@ -148,14 +159,12 @@ export async function federatedSearch(query: string, limitPerSource = 12): Promi
     searchWiki(q, limitPerSource),
   ]);
 
-  const resources = [
-    ...(hub.status === 'fulfilled' ? hub.value : []),
-    ...(wiki.status === 'fulfilled' ? wiki.value : []),
-  ];
-
   return {
     query: q,
-    resources,
+    resources: [
+      ...(hub.status === 'fulfilled' ? hub.value : []),
+      ...(wiki.status === 'fulfilled' ? wiki.value : []),
+    ],
     sources: {
       hub: failure(hub, HUB),
       wiki: failure(wiki, WIKI),

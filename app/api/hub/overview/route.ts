@@ -18,30 +18,36 @@ export async function GET() {
   const categoriesData = categoriesResult.status === 'fulfilled' ? categoriesResult.value : null;
   const topData = topResult.status === 'fulfilled' ? topResult.value : null;
 
-  const latest = (latestData?.topic_list?.topics ?? []).slice(0, 12).map((topic: any) => ({
-    id: topic.id,
-    title: topic.title,
-    slug: topic.slug,
-    url: `${HUB}/t/${topic.slug}/${topic.id}`,
-    posts: topic.posts_count,
-    views: topic.views,
-    categoryId: topic.category_id,
-    lastPostedAt: topic.last_posted_at,
-    tags: topic.tags ?? [],
-  }));
+  const latest = [...(latestData?.topic_list?.topics ?? [])]
+    .sort((a: any, b: any) => Date.parse(b.last_posted_at ?? b.created_at ?? '0') - Date.parse(a.last_posted_at ?? a.created_at ?? '0'))
+    .slice(0, 12)
+    .map((topic: any) => ({
+      id: topic.id,
+      title: topic.title,
+      slug: topic.slug,
+      url: `${HUB}/t/${topic.slug}/${topic.id}`,
+      posts: topic.posts_count,
+      views: topic.views,
+      categoryId: topic.category_id,
+      lastPostedAt: topic.last_posted_at,
+      tags: topic.tags ?? [],
+    }));
 
-  const categories = (categoriesData?.category_list?.categories ?? []).map((category: any) => ({
-    id: category.id,
-    name: category.name,
-    slug: category.slug,
-    description: stripHtml(category.description_text ?? category.description ?? ''),
-    topicCount: category.topic_count,
-    postCount: category.post_count,
-    position: category.position,
-    parentCategoryId: category.parent_category_id,
-    color: category.color,
-    url: `${HUB}/c/${category.slug}/${category.id}`,
-  }));
+  const categories = [...(categoriesData?.category_list?.categories ?? [])]
+    .sort((a: any, b: any) => Number(a.position ?? 999) - Number(b.position ?? 999))
+    .map((category: any) => ({
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      description: stripHtml(category.description_text ?? category.description ?? ''),
+      topicCount: category.topic_count,
+      postCount: category.post_count,
+      position: category.position,
+      parentCategoryId: category.parent_category_id,
+      subcategoryIds: category.subcategory_ids ?? [],
+      color: category.color,
+      url: `${HUB}/c/${category.slug}/${category.id}`,
+    }));
 
   const top = (topData?.topic_list?.topics ?? []).slice(0, 8).map((topic: any) => ({
     id: topic.id,

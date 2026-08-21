@@ -20,7 +20,7 @@ async function query(params: Record<string, string>) {
 export async function GET() {
   const [recentResult, categoriesResult, statsResult] = await Promise.allSettled([
     query({ list: 'recentchanges', rclimit: '12', rcnamespace: '0', rcprop: 'title|timestamp|user|comment|ids|sizes|flags' }),
-    query({ list: 'allcategories', aclimit: '24', acprop: 'size' }),
+    query({ list: 'allcategories', aclimit: '100', acprop: 'size' }),
     query({ meta: 'siteinfo', siprop: 'statistics|general' }),
   ]);
 
@@ -42,14 +42,18 @@ export async function GET() {
     url: `${WIKI}/${encodeURIComponent(String(change.title).replace(/ /g, '_'))}`,
   }));
 
-  const categories = (categoriesData?.query?.allcategories ?? []).map((category: any) => ({
-    name: category.category ?? category['*'],
-    pages: category.pages,
-    files: category.files,
-    subcats: category.subcats,
-    size: category.size,
-    url: `${WIKI}/Category:${encodeURIComponent(String(category.category ?? category['*']).replace(/ /g, '_'))}`,
-  }));
+  const categories = (categoriesData?.query?.allcategories ?? [])
+    .map((category: any) => ({
+      name: category.category ?? category['*'],
+      pages: category.pages,
+      files: category.files,
+      subcats: category.subcats,
+      size: category.size,
+      url: `${WIKI}/Category:${encodeURIComponent(String(category.category ?? category['*']).replace(/ /g, '_'))}`,
+    }))
+    .filter((category: any) => category.name && !/^\.+$/.test(category.name))
+    .sort((a: any, b: any) => Number(b.size ?? 0) - Number(a.size ?? 0))
+    .slice(0, 32);
 
   const statistics = statsData?.query?.statistics ?? {};
   const general = statsData?.query?.general ?? {};
