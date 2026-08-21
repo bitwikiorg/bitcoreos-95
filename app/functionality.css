@@ -52,7 +52,7 @@
 .browse-details { margin-top: 7px; padding: 6px 8px; border-top: 1px solid #aaa49a; }
 .browse-details summary { cursor: pointer; font-weight: 700; font-size: 11px; }
 .browse-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 8px 0 2px; }
-.browse-grid > div { display: flex; flex-wrap: wrap; gap: 4px; align-content: start; }
+.browse-grid > div { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
 .browse-grid b { width: 100%; margin-bottom: 2px; }
 .browse-grid button { background: #f5f0e8; border: 1px solid #aaa; padding: 3px 6px; font-size: 10px; }
 
