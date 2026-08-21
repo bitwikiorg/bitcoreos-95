@@ -5,6 +5,7 @@ import './simplify.css';
 import './ophanim-relay.css';
 import './resource-reader.css';
 import './functionality.css';
+import './semantic-workspaces.css';
 
 export const metadata: Metadata = {
   title: 'BITCOREOS-95',
