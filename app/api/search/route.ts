@@ -29,7 +29,7 @@ async function searchHub(query: string): Promise<Resource[]> {
   }));
 }
 
-function wikiResource(page: any, mode: 'fulltext' | 'prefix'): Resource {
+function wikiResource(page: any, mode: 'fulltext' | 'allpages'): Resource {
   return {
     id: `wiki:${page.pageid}`,
     source: 'wiki',
@@ -65,11 +65,11 @@ async function searchWiki(query: string): Promise<Resource[]> {
     return fulltextResults.map((page: any) => wikiResource(page, 'fulltext'));
   }
 
-  // BITwiki can have valid pages while the MediaWiki full-text index is sparse/stale.
-  // Prefix search remains useful for navigation and does not make the shell depend on that index.
-  const prefix = await wikiApi({ list: 'prefixsearch', pssearch: query, pslimit: '12' });
-  const prefixResults = Array.isArray(prefix?.query?.prefixsearch) ? prefix.query.prefixsearch : [];
-  return prefixResults.map((page: any) => wikiResource(page, 'prefix'));
+  // Database-backed fallback: unlike full-text/prefix search, allpages does not rely on
+  // BITwiki's search index. It keeps title navigation usable while that index is sparse/stale.
+  const allpages = await wikiApi({ list: 'allpages', apprefix: query, aplimit: '12', apnamespace: '0' });
+  const titleResults = Array.isArray(allpages?.query?.allpages) ? allpages.query.allpages : [];
+  return titleResults.map((page: any) => wikiResource(page, 'allpages'));
 }
 
 function failureMessage(result: PromiseSettledResult<Resource[]>) {
