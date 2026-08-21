@@ -7,28 +7,29 @@ import { Explorer } from './Explorer';
 import { OntologyGraph } from './OntologyGraph';
 import { ChatWorkspace } from './ChatWorkspace';
 import { ResearchWorkspace } from './ResearchWorkspace';
+import { PersonalSpace } from './PersonalSpace';
 import { OphanimSeal } from './OphanimSeal';
 
-export type View = 'cockpit' | 'explorer' | 'ontology' | 'ask' | 'research';
+export type View = 'cockpit' | 'explorer' | 'ontology' | 'ask' | 'research' | 'my';
 
 type AuthState = {
   user: null | { username: string; name?: string; avatarUrl?: string; admin?: boolean; groups?: string[] };
   configured: boolean;
 };
 
-const routes: Array<{ id: Exclude<View, 'cockpit'>; label: string; href: string }> = [
-  { id: 'explorer', label: 'Explorer', href: '/explorer' },
-  { id: 'ontology', label: 'Ontology', href: '/ontology' },
+const routes: Array<{ id: 'ask' | 'research' | 'explorer'; label: string; href: string }> = [
   { id: 'ask', label: 'Ask', href: '/ask' },
   { id: 'research', label: 'Research', href: '/research' },
+  { id: 'explorer', label: 'Explore', href: '/explorer' },
 ];
 
 const titles: Record<View, string> = {
   cockpit: 'Navigator',
-  explorer: 'Explorer',
-  ontology: 'Ontology',
+  explorer: 'Explore',
+  ontology: 'Knowledge Graph',
   ask: 'Ask',
   research: 'Research',
+  my: 'My BIThub',
 };
 
 export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
@@ -47,6 +48,7 @@ export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
     await refreshAuth();
+    router.push('/');
   }
 
   return (
@@ -61,17 +63,13 @@ export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
 
         <nav className="os-tabstrip" aria-label="Primary navigation">
           {routes.map((route) => (
-            <button key={route.id} data-active={initialView === route.id} onClick={() => router.push(route.href)}>{route.label}</button>
+            <button key={route.id} data-active={initialView === route.id || (route.id === 'explorer' && initialView === 'ontology')} onClick={() => router.push(route.href)}>{route.label}</button>
           ))}
           <div className="os-tab-spacer" />
-          {auth.user ? (
-            <div className="identity-cluster">
-              <a href={`https://hub.bitwiki.org/u/${encodeURIComponent(auth.user.username)}`} target="_blank" rel="noreferrer" className="identity-button">@{auth.user.username}</a>
-              <button onClick={logout}>Out</button>
-            </div>
-          ) : auth.configured ? (
-            <a className="identity-button" href="/api/auth/login">Sign in</a>
-          ) : null}
+          <button className="identity-button" data-active={initialView === 'my'} onClick={() => router.push('/my')}>
+            {auth.user ? `@${auth.user.username}` : 'My BIThub'}
+          </button>
+          {auth.user && <button onClick={logout}>Out</button>}
         </nav>
 
         <div className="os-content">
@@ -80,6 +78,7 @@ export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
           {initialView === 'ontology' && <OntologyGraph />}
           {initialView === 'ask' && <ChatWorkspace />}
           {initialView === 'research' && <ResearchWorkspace />}
+          {initialView === 'my' && <PersonalSpace />}
         </div>
       </section>
 
