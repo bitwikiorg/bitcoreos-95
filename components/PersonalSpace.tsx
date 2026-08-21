@@ -35,9 +35,7 @@ export function PersonalSpace() {
         const response = await fetch('/api/me/overview', { credentials: 'include', cache: 'no-store' });
         if (response.ok) setData(await response.json());
       }
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   useEffect(() => { void load(); }, []);
@@ -57,7 +55,7 @@ export function PersonalSpace() {
       <div className="personal-gate win-panel raised">
         <div className="mini-title">MY BITHUB</div>
         <h1>Your work, without the forum maze.</h1>
-        <p>Topics, replies, BITwiki contributions, and delegated private state are organized here around your identity.</p>
+        <p>Topics, replies, matching BITwiki activity, and delegated user state can be organized here around your BIThub identity.</p>
         {auth.configured
           ? <a className="spectral-button inline-action" href="/api/auth/login">Sign in with BIThub</a>
           : <div className="gate-note">Identity wiring is implemented, but the production DiscourseConnect secrets are not configured yet.</div>}
@@ -68,6 +66,12 @@ export function PersonalSpace() {
   if (!data) return <div className="personal-gate win-panel raised">Unable to load the personal projection.</div>;
 
   const avatar = avatarUrl(data.profile.avatarTemplate) || auth.user.avatarUrl || '';
+  const mix = {
+    topics: data.hub.topics.length,
+    replies: data.hub.posts.length,
+    wiki: data.wiki.contributions.length,
+  };
+  const mixTotal = Math.max(1, mix.topics + mix.replies + mix.wiki);
 
   return (
     <div className="personal-space">
@@ -93,6 +97,15 @@ export function PersonalSpace() {
       <section className="personal-body win-panel raised">
         {tab === 'trail' && (
           <div className="trail-view">
+            <div className="contribution-mix" aria-label="Recent contribution mix">
+              <div className="mix-copy"><b>Recent contribution mix</b><span>Real retrieved activity, not an XP score.</span></div>
+              <div className="mix-track">
+                <span className="mix-topic" style={{ width: `${(mix.topics / mixTotal) * 100}%` }} />
+                <span className="mix-reply" style={{ width: `${(mix.replies / mixTotal) * 100}%` }} />
+                <span className="mix-wiki" style={{ width: `${(mix.wiki / mixTotal) * 100}%` }} />
+              </div>
+              <div className="mix-legend"><span>■ {mix.topics} starts</span><span>■ {mix.replies} replies</span><span>■ {mix.wiki} wiki edits</span></div>
+            </div>
             <div className="personal-section-head"><div><b>Recent work</b><span>Topics you started and replies you made, merged by time.</span></div><a href={`https://hub.bitwiki.org/u/${encodeURIComponent(data.username)}/activity`} target="_blank" rel="noreferrer">Full activity ↗</a></div>
             <div className="trail-list">
               {activity.slice(0, 24).map((item) => <ActivityRow key={item.id} item={item} />)}
@@ -104,19 +117,19 @@ export function PersonalSpace() {
         {tab === 'wiki' && (
           <div className="wiki-personal-view">
             <div className="namespace-card">
-              <div className="mini-title">USER NAMESPACE</div>
+              <div className="mini-title">MATCHING USER NAMESPACE</div>
               <h2>{data.wiki.namespace.title}</h2>
-              <p>{data.wiki.namespace.exists ? 'A public MediaWiki user-namespace page exists for this identity.' : 'No matching public User: page exists yet. Once Hub/Wiki identity is unified, this namespace can become a durable user-owned knowledge surface.'}</p>
+              <p>{data.wiki.namespace.exists ? 'A public MediaWiki User: page exists under the same username. This is a provisional username match until BIThub and BITwiki share a verified identity bridge.' : 'No public User: page exists under the same username. Once Hub/Wiki identity is unified, this namespace can become a durable user-owned knowledge surface.'}</p>
               <a href={data.wiki.namespace.url} target="_blank" rel="noreferrer">Open namespace ↗</a>
             </div>
             <div className="wiki-contrib-list">
-              <div className="personal-section-head"><div><b>Recent wiki contributions</b><span>Direct MediaWiki contribution history for the same username.</span></div></div>
+              <div className="personal-section-head"><div><b>Matching wiki contributions</b><span>MediaWiki contribution history for the same username; provisional until identity bridging is verified.</span></div></div>
               {data.wiki.contributions.map((item) => (
                 <a className="wiki-contrib-row" href={item.url} target="_blank" rel="noreferrer" key={`${item.id}-${item.title}`}>
                   <strong>{item.title}</strong><span>{item.comment || 'edit'}</span><small>{item.timestamp ? new Date(item.timestamp).toLocaleDateString() : ''}{item.sizeDiff ? ` · ${item.sizeDiff > 0 ? '+' : ''}${item.sizeDiff} bytes` : ''}</small>
                 </a>
               ))}
-              {!data.wiki.contributions.length && <div className="quiet-empty">No matching public MediaWiki contributions.</div>}
+              {!data.wiki.contributions.length && <div className="quiet-empty">No public MediaWiki contributions matched this username.</div>}
             </div>
           </div>
         )}
