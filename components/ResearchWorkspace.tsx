@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import type { Resource } from '@/lib/resources';
+import type { KnowledgeRequest, ResearchIntent, ResearchPreflight } from '@/lib/research';
 
 type ResearchPlan = {
   workingTitle: string;
@@ -14,124 +15,129 @@ type ResearchPlan = {
 
 type Packet = {
   id: string;
-  status: string;
   request: string;
+  intent: ResearchIntent;
+  targetTitle?: string | null;
+  knowledgeStatus: string;
+  executionStatus: string;
+  preflight: ResearchPreflight;
   plan: ResearchPlan;
   evidence: Resource[];
   aiPlanned: boolean;
-  execution: string;
 };
+
+const intentOptions: Array<{ value: ResearchIntent; label: string; hint: string }> = [
+  { value: 'new-page', label: 'New page', hint: 'Research a missing durable knowledge object.' },
+  { value: 'revise-page', label: 'Revise page', hint: 'Strengthen, correct, or extend an existing page.' },
+  { value: 'category', label: 'Category / navigation', hint: 'Research scope, boundaries, and navigation structure.' },
+  { value: 'semantic-model', label: 'SMW semantic model', hint: 'Model reusable properties, relationships, or Concepts.' },
+  { value: 'lua-projection', label: 'Lua / computed projection', hint: 'Research a repeated computation, query, or presentation layer.' },
+  { value: 'artifact', label: 'Reusable artifact', hint: 'Distill a reusable method, dataset, prompt, report, or workflow artifact.' },
+  { value: 'coverage-audit', label: 'Coverage audit', hint: 'Identify a prioritized set of missing or weak knowledge targets.' },
+];
 
 export function ResearchWorkspace() {
   const [request, setRequest] = useState('');
+  const [intent, setIntent] = useState<ResearchIntent>('new-page');
+  const [targetTitle, setTargetTitle] = useState('');
   const [packet, setPacket] = useState<Packet | null>(null);
+  const [queue, setQueue] = useState<KnowledgeRequest[]>([]);
+  const [queueHealth, setQueueHealth] = useState<string>('loading');
   const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState<Array<{ id: string; request: string; title: string; createdAt: string }>>([]);
+  const [broker, setBroker] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [dispatchState, setDispatchState] = useState('');
 
   useEffect(() => {
     try {
       const seed = sessionStorage.getItem('bitcoreos-research-seed');
-      if (seed) {
-        sessionStorage.removeItem('bitcoreos-research-seed');
-        setRequest(seed);
-      }
-      const raw = localStorage.getItem('bitcoreos-research-history');
-      if (raw) setHistory(JSON.parse(raw));
+      const target = sessionStorage.getItem('bitcoreos-research-target');
+      if (seed) { sessionStorage.removeItem('bitcoreos-research-seed'); setRequest(seed); }
+      if (target) { sessionStorage.removeItem('bitcoreos-research-target'); setTargetTitle(target); setIntent('revise-page'); }
     } catch {}
+    void fetch('/api/research/requests?limit=120').then((r) => r.json()).then((data) => {
+      setQueue(Array.isArray(data?.requests) ? data.requests : []);
+      setQueueHealth(data?.ok ? 'live' : (data?.error || 'unavailable'));
+    }).catch(() => setQueueHealth('unavailable'));
+    void fetch('/api/actions/status').then((r) => r.json()).then((data) => setBroker(Boolean(data?.configured))).catch(() => setBroker(false));
+    void fetch('/api/auth/me', { credentials: 'include' }).then((r) => r.json()).then((data) => setAuthenticated(Boolean(data?.user))).catch(() => setAuthenticated(false));
   }, []);
 
-  async function deploy(event: FormEvent) {
+  async function plan(event: FormEvent) {
     event.preventDefault();
     const value = request.trim();
     if (!value || loading) return;
     setLoading(true);
+    setDispatchState('');
     try {
       const response = await fetch('/api/research', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ request: value }),
+        body: JSON.stringify({ request: value, intent, targetTitle: targetTitle.trim() || undefined }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error ?? 'research_failed');
       setPacket(data);
-      const entry = { id: data.id, request: value, title: data.plan?.workingTitle ?? value.slice(0, 64), createdAt: new Date().toISOString() };
-      setHistory((items) => {
-        const next = [entry, ...items.filter((item) => item.id !== entry.id)].slice(0, 12);
-        try { localStorage.setItem('bitcoreos-research-history', JSON.stringify(next)); } catch {}
-        return next;
-      });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
-  return (
-    <div className="research-workspace">
-      <aside className="research-history win-panel raised">
-        <div className="mini-title">REQUEST REGISTER</div>
-        <div className="register-list sunken">
-          {history.length === 0 && <div className="register-empty">No local research packets yet.</div>}
-          {history.map((item) => (
-            <div className="register-row" key={item.id}><strong>{item.title}</strong><small>{new Date(item.createdAt).toLocaleDateString()}</small></div>
-          ))}
-        </div>
-        <p>Register history is local to this browser. A future execution adapter can assign packets to the swarm without changing this cockpit schema.</p>
-      </aside>
+  async function dispatch() {
+    if (!packet || !broker || !authenticated) return;
+    setDispatchState('sending');
+    const response = await fetch('/api/actions/dispatch', {
+      method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        action: 'research.deploy',
+        target: { resource: packet.targetTitle || packet.plan.workingTitle },
+        payload: { request: packet.request, intent: packet.intent, targetTitle: packet.targetTitle, preflight: packet.preflight, plan: packet.plan },
+        context: { resourceRefs: packet.evidence.map((item) => item.id), hubRefs: packet.evidence.filter((item) => item.source === 'hub').map((item) => item.url), wikiRefs: packet.evidence.filter((item) => item.source === 'wiki').map((item) => item.url) },
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setDispatchState(response.ok ? `queued · ${data?.envelope?.correlationId || 'accepted'}` : `not queued · ${data?.error || response.status}`);
+  }
 
-      <section className="research-main win-panel raised">
-        <div className="panel-heading"><div><span className="signal-dot" />RESEARCH DEPLOYMENT</div><small>planned · evidence-aware · no automatic publishing</small></div>
-        <form className="research-form" onSubmit={deploy}>
-          <label>
-            <span>Research request</span>
-            <textarea value={request} onChange={(event) => setRequest(event.target.value)} rows={5} placeholder="Describe the question, conflict, domain, or knowledge gap that should become a well-researched BITwiki page." />
-          </label>
-          <div className="research-form-footer">
-            <div><b>Output:</b> scope + evidence map + article outline + gaps + next actions</div>
-            <button className="spectral-button" disabled={loading || !request.trim()} type="submit">{loading ? 'Compiling packet…' : 'Deploy request →'}</button>
+  const selectedIntent = intentOptions.find((item) => item.value === intent) || intentOptions[0];
+  const activeQueue = queue.filter((item) => !['satisfied', 'declined'].includes(item.status));
+
+  return (
+    <div className="research-simple">
+      <section className="research-main-simple win-panel raised">
+        <div className="panel-heading simple-heading"><div>RESEARCH</div><small>request → evidence → durable knowledge</small></div>
+        <form className="research-form simple-research-form" onSubmit={plan}>
+          <div className="research-form-grid">
+            <label><span>What kind of change?</span><select value={intent} onChange={(event) => setIntent(event.target.value as ResearchIntent)}>{intentOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><small>{selectedIntent.hint}</small></label>
+            <label><span>Target title / object <i>optional</i></span><input value={targetTitle} onChange={(event) => setTargetTitle(event.target.value)} placeholder={intent === 'new-page' ? 'Likely BITwiki title' : 'Existing page, category, property, or module'} /></label>
           </div>
+          <label><span>Research request</span><textarea value={request} onChange={(event) => setRequest(event.target.value)} rows={5} placeholder="What is missing, weak, disputed, reusable, or worth distilling?" /></label>
+          <div className="research-form-footer"><span>Planning is read-only. It checks BITwiki + BIThub + the canonical request queue first.</span><button className="spectral-button" disabled={loading || !request.trim()} type="submit">{loading ? 'Checking…' : 'Plan research'}</button></div>
         </form>
 
-        {!packet && (
-          <div className="research-empty codex-field">
-            <div className="foreign-geometry" aria-hidden="true"><span /><span /><span /></div>
-            <div><div className="mini-title">RESEARCH IS A STATE TRANSITION</div><h2>From question → workcell → evidence → durable memory.</h2><p>The cockpit does not publish speculative text directly. It creates an explicit research packet that can be reviewed, assigned, executed, and eventually promoted into BITwiki.</p></div>
-          </div>
-        )}
+        {!packet && <div className="research-quiet"><b>Research should answer the right structural question first.</b><span>New page? Revision? Category? Semantic property? Lua projection? Reusable artifact? Coverage gap?</span></div>}
 
         {packet && (
-          <div className="packet-view">
-            <header className="packet-header">
-              <div><div className="mini-title">PACKET {packet.id.toUpperCase()}</div><h2>{packet.plan.workingTitle}</h2><p>{packet.plan.objective}</p></div>
-              <div className="packet-state"><span>STATUS</span><b>{packet.status}</b><span>PLANNER</span><b>{packet.aiPlanned ? 'AI + retrieval' : 'deterministic + retrieval'}</b><span>EXECUTION</span><b>{packet.execution}</b></div>
-            </header>
-            <div className="packet-columns">
-              <PacketList title="Questions" items={packet.plan.researchQuestions} />
-              <PacketList title="Wiki structure" items={packet.plan.wikiOutline} />
-              <PacketList title="Evidence gaps" items={packet.plan.evidenceGaps} />
-              <PacketList title="Next actions" items={packet.plan.nextActions} />
-            </div>
-          </div>
+          <article className="packet-simple">
+            <header><div className="mini-title">PREFLIGHT // {packet.knowledgeStatus.toUpperCase()}</div><h1>{packet.plan.workingTitle}</h1><p>{packet.plan.objective}</p></header>
+            <div className="preflight-callout"><b>{packet.preflight.recommendation}</b><span>{packet.preflight.existingPage ? `Existing page: ${packet.preflight.existingPage.title}` : 'No exact target page resolved.'}{packet.preflight.matchingRequests.length ? ` · ${packet.preflight.matchingRequests.length} overlapping request(s).` : ''}</span></div>
+
+            <details open><summary>Proposed durable structure</summary><ol>{packet.plan.wikiOutline.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ol></details>
+            <details><summary>Research questions ({packet.plan.researchQuestions.length})</summary><ol>{packet.plan.researchQuestions.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ol></details>
+            <details><summary>Evidence gaps ({packet.plan.evidenceGaps.length})</summary><ul>{packet.plan.evidenceGaps.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></details>
+            <details><summary>Internal evidence ({packet.evidence.length})</summary><div className="packet-evidence-compact">{packet.evidence.map((resource) => <a href={resource.url} target="_blank" rel="noreferrer" key={resource.id}><span className={`source-chip ${resource.source}`}>{resource.source === 'hub' ? 'HUB' : 'WIKI'}</span><b>{resource.title}</b></a>)}</div></details>
+
+            {broker && authenticated && <div className="dispatch-row"><button className="spectral-button" onClick={dispatch} type="button">Send to guarded research queue</button><span>{dispatchState || 'n8n will own sensitive writes, dispatch, and verification.'}</span></div>}
+          </article>
         )}
       </section>
 
-      <aside className="research-evidence win-panel raised">
-        <div className="mini-title">EVIDENCE MAP</div>
-        <div className="evidence-list">
-          {(packet?.evidence ?? []).map((resource, index) => (
-            <a href={resource.url} target="_blank" rel="noreferrer" key={resource.id} className="evidence-card">
-              <span className={`source-chip ${resource.source}`}>{resource.source === 'hub' ? `H${index + 1}` : `W${index + 1}`}</span>
-              <div><strong>{resource.title}</strong><small>{resource.kind}</small><p>{resource.excerpt || 'Internal source match'}</p></div>
-            </a>
-          ))}
-          {!packet && <div className="inspector-empty">Deploy a request to map existing Hub/Wiki evidence before external research begins.</div>}
+      <aside className="research-queue win-panel raised">
+        <div className="mini-title">REQUESTED KNOWLEDGE // {queueHealth.toUpperCase()}</div>
+        <p className="queue-intro">Canonical Cargo lifecycle. This is not a second local backlog.</p>
+        <div className="queue-list sunken">
+          {activeQueue.slice(0, 24).map((item) => <button key={item.request} onClick={() => { setRequest(item.reason ? `${item.request}: ${item.reason}` : item.request); setTargetTitle(item.request); setIntent('new-page'); }}><span className={`queue-status ${item.status}`}>{item.status}</span><strong>{item.request}</strong><small>{item.neededDepth || item.candidateDomains?.join(', ') || ''}</small></button>)}
+          {!activeQueue.length && <div className="quiet-empty">{queueHealth === 'live' ? 'No active requests returned.' : 'Cargo request state unavailable.'}</div>}
         </div>
       </aside>
     </div>
-  );
-}
-
-function PacketList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <section className="packet-list sunken"><div className="mini-title">{title.toUpperCase()}</div><ol>{(items ?? []).map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ol></section>
   );
 }
