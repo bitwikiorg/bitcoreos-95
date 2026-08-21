@@ -7,7 +7,7 @@ import { Explorer } from './Explorer';
 import { OntologyGraph } from './OntologyGraph';
 import { ChatWorkspace } from './ChatWorkspace';
 import { ResearchWorkspace } from './ResearchWorkspace';
-import { CornerChat } from './CornerChat';
+import { OphanimSeal } from './OphanimSeal';
 
 export type View = 'cockpit' | 'explorer' | 'ontology' | 'ask' | 'research';
 
@@ -83,7 +83,7 @@ export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
         </div>
       </section>
 
-      {initialView !== 'ask' && <CornerChat />}
+      <OphanimSeal />
     </main>
   );
 }
