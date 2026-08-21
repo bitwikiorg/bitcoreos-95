@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import type { Resource } from '@/lib/resources';
-import type { KnowledgeRequest, ResearchIntent, ResearchPreflight } from '@/lib/research';
+import type { KnowledgeRequest, ResearchIntent, ResearchPreflight, RequestStoreSource } from '@/lib/research';
 
 type ResearchPlan = {
   workingTitle: string;
@@ -42,7 +42,8 @@ export function ResearchWorkspace() {
   const [targetTitle, setTargetTitle] = useState('');
   const [packet, setPacket] = useState<Packet | null>(null);
   const [queue, setQueue] = useState<KnowledgeRequest[]>([]);
-  const [queueHealth, setQueueHealth] = useState<string>('loading');
+  const [queueSource, setQueueSource] = useState<RequestStoreSource | 'loading'>('loading');
+  const [queueWarning, setQueueWarning] = useState('');
   const [loading, setLoading] = useState(false);
   const [broker, setBroker] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
@@ -57,8 +58,9 @@ export function ResearchWorkspace() {
     } catch {}
     void fetch('/api/research/requests?limit=120').then((r) => r.json()).then((data) => {
       setQueue(Array.isArray(data?.requests) ? data.requests : []);
-      setQueueHealth(data?.ok ? 'live' : (data?.error || 'unavailable'));
-    }).catch(() => setQueueHealth('unavailable'));
+      setQueueSource(data?.ok ? (data?.source || 'unavailable') : 'unavailable');
+      setQueueWarning(String(data?.warning || data?.error || ''));
+    }).catch(() => setQueueSource('unavailable'));
     void fetch('/api/actions/status').then((r) => r.json()).then((data) => setBroker(Boolean(data?.configured))).catch(() => setBroker(false));
     void fetch('/api/auth/me', { credentials: 'include' }).then((r) => r.json()).then((data) => setAuthenticated(Boolean(data?.user))).catch(() => setAuthenticated(false));
   }, []);
@@ -99,6 +101,7 @@ export function ResearchWorkspace() {
 
   const selectedIntent = intentOptions.find((item) => item.value === intent) || intentOptions[0];
   const activeQueue = queue.filter((item) => !['satisfied', 'declined'].includes(item.status));
+  const sourceLabel = queueSource === 'cargo' ? 'CARGO' : queueSource === 'wiki-content' ? 'SOURCE' : queueSource.toUpperCase();
 
   return (
     <div className="research-simple">
@@ -131,11 +134,12 @@ export function ResearchWorkspace() {
       </section>
 
       <aside className="research-queue win-panel raised">
-        <div className="mini-title">REQUESTED KNOWLEDGE // {queueHealth.toUpperCase()}</div>
-        <p className="queue-intro">Canonical Cargo lifecycle. This is not a second local backlog.</p>
+        <div className="mini-title">REQUESTED KNOWLEDGE // {sourceLabel}</div>
+        <p className="queue-intro">{queueSource === 'cargo' ? 'Live Cargo lifecycle state.' : queueSource === 'wiki-content' ? 'Canonical source-controlled request state; live Cargo has not caught up yet.' : 'Request state is unavailable.'} This is not a second local backlog.</p>
+        {queueWarning && <details className="queue-warning"><summary>source status</summary><p>{queueWarning}</p></details>}
         <div className="queue-list sunken">
           {activeQueue.slice(0, 24).map((item) => <button key={item.request} onClick={() => { setRequest(item.reason ? `${item.request}: ${item.reason}` : item.request); setTargetTitle(item.request); setIntent('new-page'); }}><span className={`queue-status ${item.status}`}>{item.status}</span><strong>{item.request}</strong><small>{item.neededDepth || item.candidateDomains?.join(', ') || ''}</small></button>)}
-          {!activeQueue.length && <div className="quiet-empty">{queueHealth === 'live' ? 'No active requests returned.' : 'Cargo request state unavailable.'}</div>}
+          {!activeQueue.length && <div className="quiet-empty">{queueSource === 'cargo' || queueSource === 'wiki-content' ? 'No active requests returned.' : 'Knowledge-request state unavailable.'}</div>}
         </div>
       </aside>
     </div>
