@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import type { Resource } from '@/lib/resources';
 import type { KnowledgeRequest, ResearchIntent, ResearchPreflight, RequestStoreSource } from '@/lib/research';
+import { SemanticFacts, type SemanticFact } from './SemanticFacts';
 
 type ResearchPlan = {
   workingTitle: string;
@@ -21,6 +22,7 @@ type Packet = {
   knowledgeStatus: string;
   executionStatus: string;
   preflight: ResearchPreflight;
+  semanticFacts: SemanticFact[];
   plan: ResearchPlan;
   evidence: Resource[];
   aiPlanned: boolean;
@@ -91,7 +93,7 @@ export function ResearchWorkspace() {
       body: JSON.stringify({
         action: 'research.deploy',
         target: { resource: packet.targetTitle || packet.plan.workingTitle },
-        payload: { request: packet.request, intent: packet.intent, targetTitle: packet.targetTitle, preflight: packet.preflight, plan: packet.plan },
+        payload: { request: packet.request, intent: packet.intent, targetTitle: packet.targetTitle, preflight: packet.preflight, semanticFacts: packet.semanticFacts, plan: packet.plan },
         context: { resourceRefs: packet.evidence.map((item) => item.id), hubRefs: packet.evidence.filter((item) => item.source === 'hub').map((item) => item.url), wikiRefs: packet.evidence.filter((item) => item.source === 'wiki').map((item) => item.url) },
       }),
     });
@@ -124,6 +126,7 @@ export function ResearchWorkspace() {
             <div className="preflight-callout"><b>{packet.preflight.recommendation}</b><span>{packet.preflight.existingPage ? `Existing page: ${packet.preflight.existingPage.title}` : 'No exact target page resolved.'}{packet.preflight.matchingRequests.length ? ` · ${packet.preflight.matchingRequests.length} overlapping request(s).` : ''}</span></div>
 
             <details open><summary>Proposed durable structure</summary><ol>{packet.plan.wikiOutline.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ol></details>
+            {!!packet.semanticFacts?.length && <details><summary>Current semantic relations ({packet.semanticFacts.length})</summary><SemanticFacts facts={packet.semanticFacts} /></details>}
             <details><summary>Research questions ({packet.plan.researchQuestions.length})</summary><ol>{packet.plan.researchQuestions.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ol></details>
             <details><summary>Evidence gaps ({packet.plan.evidenceGaps.length})</summary><ul>{packet.plan.evidenceGaps.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></details>
             <details><summary>Internal evidence ({packet.evidence.length})</summary><div className="packet-evidence-compact">{packet.evidence.map((resource) => <a href={resource.url} target="_blank" rel="noreferrer" key={resource.id}><span className={`source-chip ${resource.source}`}>{resource.source === 'hub' ? 'HUB' : 'WIKI'}</span><b>{resource.title}</b></a>)}</div></details>
