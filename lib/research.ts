@@ -10,6 +10,7 @@ export type ResearchIntent =
   | 'coverage-audit';
 
 export type KnowledgeStatus = 'requested' | 'researching' | 'drafting' | 'review' | 'satisfied' | 'declined';
+export type RequestStoreSource = 'cargo' | 'wiki-content' | 'unavailable';
 
 export type KnowledgeRequest = {
   request: string;
@@ -27,11 +28,12 @@ export type ResearchPreflight = {
   targetTitle?: string;
   existingPage: null | { title: string; pageId: number; url: string };
   matchingRequests: KnowledgeRequest[];
-  requestStore: { ok: boolean; count: number; error?: string };
+  requestStore: { ok: boolean; count: number; source: RequestStoreSource; warning?: string; error?: string };
   recommendation: string;
 };
 
 const WIKI_UA = { 'user-agent': 'BITCOREOS-95/0.4 (+https://bitwiki.org)' };
+const REQUEST_SOURCE = 'https://raw.githubusercontent.com/bitwikiorg/wiki-content/main/BITwiki/Requested%20knowledge.mediawiki';
 
 function list(value: unknown) {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -45,41 +47,88 @@ function normalizeStatus(value: unknown): KnowledgeStatus {
   return 'requested';
 }
 
-function unpackCargoRow(row: any): KnowledgeRequest | null {
-  const source = row?.title && typeof row.title === 'object' ? row.title : row;
-  const request = String(source?.Request ?? source?.request ?? '').trim();
+function requestFromFields(source: Record<string, unknown>): KnowledgeRequest | null {
+  const request = String(source.Request ?? source.request ?? '').trim();
   if (!request) return null;
   return {
     request,
-    reason: String(source?.Reason ?? source?.reason ?? '').trim() || undefined,
-    candidateDomains: list(source?.Candidate_domains ?? source?.candidate_domains),
-    sourceLeads: String(source?.Source_leads ?? source?.source_leads ?? '').trim() || undefined,
-    neededDepth: String(source?.Needed_depth ?? source?.needed_depth ?? '').trim() || undefined,
-    status: normalizeStatus(source?.Status ?? source?.status),
-    canonicalPage: String(source?.Canonical_page ?? source?.canonical_page ?? '').trim() || undefined,
-    notes: String(source?.Notes ?? source?.notes ?? '').trim() || undefined,
+    reason: String(source.Reason ?? source.reason ?? '').trim() || undefined,
+    candidateDomains: list(source.Candidate_domains ?? source.candidate_domains),
+    sourceLeads: String(source.Source_leads ?? source.source_leads ?? '').trim() || undefined,
+    neededDepth: String(source.Needed_depth ?? source.needed_depth ?? '').trim() || undefined,
+    status: normalizeStatus(source.Status ?? source.status),
+    canonicalPage: String(source.Canonical_page ?? source.canonical_page ?? '').trim() || undefined,
+    notes: String(source.Notes ?? source.notes ?? '').trim() || undefined,
   };
 }
 
-export async function getKnowledgeRequests(limit = 100): Promise<{ ok: boolean; requests: KnowledgeRequest[]; error?: string }> {
+function unpackCargoRow(row: any): KnowledgeRequest | null {
+  const source = row?.title && typeof row.title === 'object' ? row.title : row;
+  return requestFromFields(source || {});
+}
+
+function parseRequestSource(source: string): KnowledgeRequest[] {
+  const rows: KnowledgeRequest[] = [];
+  const blocks = source.matchAll(/\{\{Knowledge request\s*([\s\S]*?)\n\}\}/gi);
+  for (const block of blocks) {
+    const fields: Record<string, string> = {};
+    for (const line of String(block[1] || '').split('\n')) {
+      const match = line.match(/^\s*\|\s*([^=]+?)\s*=\s*(.*)$/);
+      if (!match) continue;
+      fields[match[1].trim()] = match[2].trim();
+    }
+    const row = requestFromFields(fields);
+    if (row) rows.push(row);
+  }
+  return rows;
+}
+
+async function sourceControlledRequests(limit: number) {
+  const response = await fetch(REQUEST_SOURCE, { next: { revalidate: 120 } } as RequestInit);
+  if (!response.ok) throw new Error(`wiki_content_http_${response.status}`);
+  const source = await response.text();
+  return parseRequestSource(source).slice(0, limit);
+}
+
+export async function getKnowledgeRequests(limit = 100): Promise<{ ok: boolean; requests: KnowledgeRequest[]; source: RequestStoreSource; warning?: string; error?: string }> {
+  const boundedLimit = Math.min(Math.max(limit, 1), 500);
   const url = new URL('/w/api.php', WIKI);
   url.searchParams.set('action', 'cargoquery');
   url.searchParams.set('format', 'json');
   url.searchParams.set('formatversion', '2');
   url.searchParams.set('tables', 'Knowledge_requests');
   url.searchParams.set('fields', 'Request,Reason,Candidate_domains,Source_leads,Needed_depth,Status,Canonical_page,Notes');
-  url.searchParams.set('limit', String(Math.min(Math.max(limit, 1), 500)));
+  url.searchParams.set('limit', String(boundedLimit));
   url.searchParams.set('order_by', 'Status,Request');
 
+  let cargoError = '';
   try {
     const response = await fetch(url, { headers: WIKI_UA, next: { revalidate: 60 } } as RequestInit);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     if (data?.error) throw new Error(data.error?.info || data.error?.code || 'cargo_query_failed');
     const rows = Array.isArray(data?.cargoquery) ? data.cargoquery : [];
-    return { ok: true, requests: rows.map(unpackCargoRow).filter((row: KnowledgeRequest | null): row is KnowledgeRequest => Boolean(row)) };
+    const requests = rows.map(unpackCargoRow).filter((row: KnowledgeRequest | null): row is KnowledgeRequest => Boolean(row));
+    return { ok: true, requests, source: 'cargo' };
   } catch (error) {
-    return { ok: false, requests: [], error: error instanceof Error ? error.message : 'cargo_query_failed' };
+    cargoError = error instanceof Error ? error.message : 'cargo_query_failed';
+  }
+
+  try {
+    const requests = await sourceControlledRequests(boundedLimit);
+    return {
+      ok: true,
+      requests,
+      source: 'wiki-content',
+      warning: `Live Cargo Knowledge_requests is unavailable; using canonical wiki-content source. Cargo error: ${cargoError}`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      requests: [],
+      source: 'unavailable',
+      error: `${cargoError}; fallback: ${error instanceof Error ? error.message : 'wiki_content_failed'}`,
+    };
   }
 }
 
@@ -151,7 +200,7 @@ export async function researchPreflight(input: { intent: ResearchIntent; targetT
     targetTitle,
     existingPage,
     matchingRequests,
-    requestStore: { ok: store.ok, count: store.requests.length, error: store.error },
+    requestStore: { ok: store.ok, count: store.requests.length, source: store.source, warning: store.warning, error: store.error },
     recommendation,
   };
 }
