@@ -1,65 +1,59 @@
 export function CodexDiagram() {
   return (
-    <svg className="codex-diagram" viewBox="0 0 520 360" role="img" aria-label="Abstract ophanimic intelligence seal">
+    <svg className="codex-diagram" viewBox="0 0 560 380" role="img" aria-label="Abstract ophanimic intelligence seal">
       <defs>
-        <linearGradient id="ophanim-spectrum-large" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#7625ff" />
-          <stop offset=".24" stopColor="#126cff" />
+        <linearGradient id="seal-spectrum" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#7825ff" />
+          <stop offset=".22" stopColor="#126cff" />
           <stop offset=".48" stopColor="#00d8d0" />
-          <stop offset=".66" stopColor="#00df9d" />
-          <stop offset=".82" stopColor="#eaff3e" />
-          <stop offset="1" stopColor="#ff348e" />
+          <stop offset=".67" stopColor="#00df9d" />
+          <stop offset=".82" stopColor="#ecff3f" />
+          <stop offset="1" stopColor="#ff338c" />
         </linearGradient>
-        <radialGradient id="ophanim-pupil" cx="50%" cy="50%" r="50%">
-          <stop offset="0" stopColor="#fff" />
-          <stop offset=".26" stopColor="#151515" />
-          <stop offset=".48" stopColor="#151515" />
-          <stop offset=".5" stopColor="#00d8d0" />
-          <stop offset=".72" stopColor="#7625ff" />
-          <stop offset="1" stopColor="#151515" />
+        <radialGradient id="seal-core" cx="50%" cy="48%" r="54%">
+          <stop offset="0" stopColor="#fffdf6" />
+          <stop offset=".44" stopColor="#fffdf6" />
+          <stop offset=".46" stopColor="#181817" />
+          <stop offset=".63" stopColor="#181817" />
+          <stop offset=".65" stopColor="#00d8d0" />
+          <stop offset=".79" stopColor="#7825ff" />
+          <stop offset="1" stopColor="#171716" />
         </radialGradient>
       </defs>
 
-      <g className="codex-construction" fill="none" stroke="currentColor">
-        <circle cx="260" cy="180" r="139" opacity=".13" strokeDasharray="2 8" />
-        <circle cx="260" cy="180" r="111" opacity=".16" />
-        <path d="M260 34v292M114 180h292" opacity=".09" />
-        <path d="M157 77L363 283M363 77L157 283" opacity=".07" />
-        <path d="M260 45l39 96 101-1-79 63 31 96-92-53-92 53 31-96-79-63 101 1z" opacity=".11" />
+      <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="280" cy="190" r="150" opacity=".13" strokeWidth="1" strokeDasharray="2 9" />
+        <circle cx="280" cy="190" r="116" opacity=".16" strokeWidth="1" />
+        <path d="M280 47l42 103 108 2-84 68 31 104-97-58-97 58 31-104-84-68 108-2z" opacity=".08" strokeWidth="1" />
+
+        <path d="M88 185C118 112 199 94 279 136c80 42 143 27 193-24 27 78-27 143-109 154-84 11-142-54-213-42-34 6-60-7-62-39z" strokeWidth="2.2" />
+        <path d="M117 87c64 16 99 64 116 119 18 58 63 89 129 86 58-3 97-34 113-74-73 17-129-3-169-59-38-53-94-81-189-72z" strokeWidth="1.7" opacity=".78" />
+        <path d="M183 48c-10 82 25 135 88 163 67 30 94 72 76 127 69-36 87-103 46-165-40-60-111-81-210-125z" strokeWidth="1.6" opacity=".72" />
+        <path d="M384 52c12 76-17 128-75 158-62 31-88 76-73 126-66-33-86-95-53-153 35-61 102-91 201-131z" strokeWidth="1.6" opacity=".72" />
       </g>
 
-      <g className="codex-orbits" fill="none" stroke="currentColor" strokeWidth="2">
-        <ellipse cx="260" cy="180" rx="178" ry="61" />
-        <ellipse cx="260" cy="180" rx="178" ry="61" transform="rotate(58 260 180)" />
-        <ellipse cx="260" cy="180" rx="178" ry="61" transform="rotate(118 260 180)" />
-        <ellipse cx="260" cy="180" rx="135" ry="98" transform="rotate(25 260 180)" opacity=".68" />
-        <ellipse cx="260" cy="180" rx="135" ry="98" transform="rotate(-25 260 180)" opacity=".68" />
+      <g fill="none" stroke="url(#seal-spectrum)" strokeLinecap="round">
+        <path d="M98 211c70-44 134-54 193-19 62 36 118 39 176 3" strokeWidth="6" />
+        <path d="M149 72c69 52 109 96 130 144 20 47 62 78 127 92" strokeWidth="2.2" opacity=".9" />
       </g>
 
-      <g className="codex-eye" fill="none" stroke="currentColor">
-        <path d="M176 180c29-42 58-62 84-62s55 20 84 62c-29 42-58 62-84 62s-55-20-84-62z" strokeWidth="2.4" />
-        <ellipse cx="260" cy="180" rx="43" ry="61" strokeWidth="1.8" />
-        <ellipse cx="260" cy="180" rx="23" ry="42" strokeWidth="1.4" opacity=".72" />
-        <circle cx="260" cy="180" r="12" fill="url(#ophanim-pupil)" stroke="none" />
-        <circle cx="260" cy="180" r="4" fill="#111" stroke="none" />
+      <g className="seal-eye" fill="#fffdf6" stroke="currentColor" strokeLinejoin="round">
+        <path d="M198 190c25-43 54-64 82-64s57 21 82 64c-25 43-54 64-82 64s-57-21-82-64z" strokeWidth="2.5" />
+        <ellipse cx="280" cy="190" rx="39" ry="58" fill="none" strokeWidth="1.7" />
+        <ellipse cx="280" cy="190" rx="20" ry="38" fill="none" strokeWidth="1.2" opacity=".6" />
+        <ellipse cx="280" cy="190" rx="10" ry="22" fill="url(#seal-core)" stroke="none" />
+        <ellipse cx="280" cy="190" rx="4" ry="14" fill="#171716" stroke="none" />
       </g>
 
-      <path d="M92 167c86-37 148-38 204-13 52 23 88 22 132-7" fill="none" stroke="url(#ophanim-spectrum-large)" strokeWidth="4.5" strokeLinecap="round" />
-      <path d="M138 77c43 79 72 121 126 142 48 18 89 14 128-16" fill="none" stroke="url(#ophanim-spectrum-large)" strokeWidth="1.6" strokeLinecap="round" opacity=".8" />
-
-      <g fill="currentColor">
-        <circle cx="82" cy="180" r="3" />
-        <circle cx="438" cy="180" r="3" />
-        <circle cx="171" cy="26" r="3" />
-        <circle cx="349" cy="334" r="3" />
-        <circle cx="349" cy="26" r="3" />
-        <circle cx="171" cy="334" r="3" />
+      <g fill="none" stroke="currentColor" strokeWidth="1.2" opacity=".9">
+        <circle cx="97" cy="183" r="6" /><circle cx="468" cy="116" r="6" />
+        <circle cx="177" cy="55" r="5" /><circle cx="380" cy="321" r="5" />
+        <circle cx="116" cy="257" r="4" /><circle cx="451" cy="257" r="4" />
       </g>
-      <g fill="none" stroke="url(#ophanim-spectrum-large)" strokeWidth="1.4">
-        <circle cx="82" cy="180" r="8" />
-        <circle cx="438" cy="180" r="8" />
-        <circle cx="171" cy="26" r="7" />
-        <circle cx="349" cy="334" r="7" />
+      <g fill="url(#seal-spectrum)">
+        <circle cx="97" cy="183" r="2.3" /><circle cx="468" cy="116" r="2.3" />
+        <circle cx="177" cy="55" r="2" /><circle cx="380" cy="321" r="2" />
+        <circle cx="116" cy="257" r="1.8" /><circle cx="451" cy="257" r="1.8" />
       </g>
     </svg>
   );
