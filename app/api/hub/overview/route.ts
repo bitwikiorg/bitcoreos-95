@@ -62,13 +62,14 @@ export async function GET() {
   }));
 
   const rawStats = aboutData?.about?.stats ?? {};
+  const numeric = (...values: unknown[]) => values.find((value) => typeof value === 'number') as number | undefined;
   const stats = {
-    topics: typeof rawStats.topic_count === 'number' ? rawStats.topic_count : undefined,
-    posts: typeof rawStats.post_count === 'number' ? rawStats.post_count : undefined,
-    users: typeof rawStats.user_count === 'number' ? rawStats.user_count : undefined,
-    activeUsers7Days: typeof rawStats.active_users_7_days === 'number' ? rawStats.active_users_7_days : undefined,
-    topics7Days: typeof rawStats.topics_7_days === 'number' ? rawStats.topics_7_days : undefined,
-    posts7Days: typeof rawStats.posts_7_days === 'number' ? rawStats.posts_7_days : undefined,
+    topics: numeric(rawStats.topics_count, rawStats.topic_count),
+    posts: numeric(rawStats.posts_count, rawStats.post_count),
+    users: numeric(rawStats.users_count, rawStats.user_count),
+    activeUsers7Days: numeric(rawStats.active_users_7_days),
+    topics7Days: numeric(rawStats.topics_7_days),
+    posts7Days: numeric(rawStats.posts_7_days),
   };
 
   return NextResponse.json({
