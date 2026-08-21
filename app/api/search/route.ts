@@ -54,8 +54,15 @@ async function wikiApi(params: Record<string, string>) {
     headers: WIKI_HEADERS,
     next: { revalidate: 60 },
   });
-  if (!response.ok) throw new Error(`BITwiki search failed: ${response.status}`);
-  return response.json();
+  if (!response.ok) throw new Error(`BITwiki API failed: HTTP ${response.status}`);
+
+  const data = await response.json();
+  if (data?.error) {
+    const code = String(data.error.code ?? 'unknown');
+    const info = String(data.error.info ?? 'MediaWiki API error');
+    throw new Error(`BITwiki API ${code}: ${info}`);
+  }
+  return data;
 }
 
 async function searchWiki(query: string): Promise<Resource[]> {
@@ -65,8 +72,6 @@ async function searchWiki(query: string): Promise<Resource[]> {
     return fulltextResults.map((page: any) => wikiResource(page, 'fulltext'));
   }
 
-  // Database-backed fallback: unlike full-text/prefix search, allpages does not rely on
-  // BITwiki's search index. It keeps title navigation usable while that index is sparse/stale.
   const allpages = await wikiApi({ list: 'allpages', apprefix: query, aplimit: '12', apnamespace: '0' });
   const titleResults = Array.isArray(allpages?.query?.allpages) ? allpages.query.allpages : [];
   return titleResults.map((page: any) => wikiResource(page, 'allpages'));
