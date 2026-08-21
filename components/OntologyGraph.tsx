@@ -1,75 +1,133 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import ReactFlow, { Background, Controls, MarkerType, type Edge, type Node } from 'reactflow';
 
-type Props = { onSelect?: (label: string) => void };
+type LayerData = {
+  label: string;
+  source: 'system' | 'hub' | 'wiki';
+  kind: string;
+  url?: string;
+  description?: string;
+  count?: number;
+};
 
-const baseNodes: Node[] = [
-  { id: 'ecosystem', position: { x: 360, y: 20 }, data: { label: 'BIT Ecosystem' }, type: 'input' },
-  { id: 'hub', position: { x: 100, y: 140 }, data: { label: 'BIThub' } },
-  { id: 'wiki', position: { x: 620, y: 140 }, data: { label: 'BITwiki' } },
-  { id: 'community', position: { x: 10, y: 280 }, data: { label: 'Community' } },
-  { id: 'constructs', position: { x: 160, y: 280 }, data: { label: 'Constructs' } },
-  { id: 'resources', position: { x: 310, y: 280 }, data: { label: 'Resources' } },
-  { id: 'concepts', position: { x: 540, y: 280 }, data: { label: 'Concepts' } },
-  { id: 'semantic', position: { x: 690, y: 280 }, data: { label: 'Semantic data' } },
-  { id: 'history', position: { x: 840, y: 280 }, data: { label: 'History' } },
-  { id: 'core', position: { x: 90, y: 420 }, data: { label: 'COREs' } },
-  { id: 'nodes', position: { x: 220, y: 420 }, data: { label: 'Nodes' } },
-  { id: 'workspaces', position: { x: 350, y: 420 }, data: { label: 'Workspaces' } },
-  { id: 'artifacts', position: { x: 500, y: 420 }, data: { label: 'Artifacts' } },
-  { id: 'ontology', position: { x: 670, y: 420 }, data: { label: 'Ontology' } },
-];
+type LayerNode = Node<LayerData>;
 
-const connect = (source: string, target: string, label?: string): Edge => ({
-  id: `${source}-${target}`,
-  source,
-  target,
-  label,
-  markerEnd: { type: MarkerType.ArrowClosed },
-});
+export function OntologyGraph() {
+  const router = useRouter();
+  const [hubCategories, setHubCategories] = useState<any[]>([]);
+  const [wikiCategories, setWikiCategories] = useState<any[]>([]);
+  const [selected, setSelected] = useState<LayerData>({ label: 'BIT Ecosystem', source: 'system', kind: 'root', description: 'Two authoritative systems projected through one navigation layer.' });
 
-const baseEdges: Edge[] = [
-  connect('ecosystem', 'hub', 'work'),
-  connect('ecosystem', 'wiki', 'knowledge'),
-  connect('hub', 'community'),
-  connect('hub', 'constructs'),
-  connect('hub', 'resources'),
-  connect('constructs', 'core'),
-  connect('constructs', 'nodes'),
-  connect('constructs', 'workspaces'),
-  connect('resources', 'artifacts'),
-  connect('wiki', 'concepts'),
-  connect('wiki', 'semantic'),
-  connect('wiki', 'history'),
-  connect('semantic', 'ontology'),
-  connect('concepts', 'ontology', 'typed by'),
-  connect('artifacts', 'concepts', 'documents'),
-  connect('community', 'concepts', 'discusses'),
-];
+  useEffect(() => {
+    void Promise.all([
+      fetch('/api/hub/overview').then((response) => response.json()).then((data) => setHubCategories(data?.categories ?? [])).catch(() => setHubCategories([])),
+      fetch('/api/wiki/overview').then((response) => response.json()).then((data) => setWikiCategories(data?.categories ?? [])).catch(() => setWikiCategories([])),
+    ]);
+  }, []);
 
-export function OntologyGraph({ onSelect }: Props) {
-  const nodes = useMemo(() => baseNodes, []);
-  const edges = useMemo(() => baseEdges, []);
+  const { nodes, edges } = useMemo(() => {
+    const ns: LayerNode[] = [
+      { id: 'ecosystem', position: { x: 420, y: 15 }, data: { label: 'BIT Ecosystem', source: 'system', kind: 'root', description: 'Unified navigation projection.' }, className: 'ontology-root' },
+      { id: 'hub', position: { x: 150, y: 145 }, data: { label: 'BIThub', source: 'hub', kind: 'system', url: 'https://hub.bitwiki.org', description: 'Live work, discussion, tools, artifacts and operating surfaces.' }, className: 'ontology-system hub-node' },
+      { id: 'wiki', position: { x: 690, y: 145 }, data: { label: 'BITwiki', source: 'wiki', kind: 'system', url: 'https://bitwiki.org', description: 'Durable semantic memory and canonical knowledge.' }, className: 'ontology-system wiki-node' },
+    ];
+    const es: Edge[] = [
+      { id: 'eco-hub', source: 'ecosystem', target: 'hub', label: 'work', markerEnd: { type: MarkerType.ArrowClosed } },
+      { id: 'eco-wiki', source: 'ecosystem', target: 'wiki', label: 'memory', markerEnd: { type: MarkerType.ArrowClosed } },
+      { id: 'hub-wiki', source: 'hub', target: 'wiki', label: 'validate → preserve', markerEnd: { type: MarkerType.ArrowClosed }, className: 'spectral-edge', animated: true },
+    ];
+
+    hubCategories.slice(0, 12).forEach((category, index) => {
+      const col = index % 3;
+      const row = Math.floor(index / 3);
+      const id = `hub-${category.id}`;
+      ns.push({
+        id,
+        position: { x: 10 + col * 170, y: 305 + row * 105 },
+        data: {
+          label: category.name,
+          source: 'hub',
+          kind: 'category',
+          url: category.url,
+          description: category.description,
+          count: category.topicCount,
+        },
+        className: 'ontology-layer hub-layer',
+      });
+      es.push({ id: `hub-${id}`, source: 'hub', target: id, markerEnd: { type: MarkerType.ArrowClosed } });
+    });
+
+    wikiCategories.slice(0, 12).forEach((category, index) => {
+      const col = index % 3;
+      const row = Math.floor(index / 3);
+      const id = `wiki-${index}-${category.name}`;
+      ns.push({
+        id,
+        position: { x: 555 + col * 170, y: 305 + row * 105 },
+        data: {
+          label: category.name,
+          source: 'wiki',
+          kind: 'category',
+          url: category.url,
+          description: `${category.pages ?? 0} pages · ${category.subcats ?? 0} subcategories`,
+          count: category.pages,
+        },
+        className: 'ontology-layer wiki-layer',
+      });
+      es.push({ id: `wiki-${id}`, source: 'wiki', target: id, markerEnd: { type: MarkerType.ArrowClosed } });
+    });
+
+    return { nodes: ns, edges: es };
+  }, [hubCategories, wikiCategories]);
+
+  function exploreSelected() {
+    if (!selected?.label) return;
+    sessionStorage.setItem('bitcoreos-search-seed', selected.label);
+    router.push('/explorer');
+  }
 
   return (
-    <div className="graph-canvas">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        fitView
-        minZoom={0.45}
-        maxZoom={1.6}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable
-        onNodeClick={(_, node) => onSelect?.(String(node.data.label))}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background gap={18} size={1} />
-        <Controls showInteractive={false} />
-      </ReactFlow>
+    <div className="ontology-workspace">
+      <section className="ontology-canvas win-panel raised">
+        <div className="panel-heading"><div>ONTOLOGY // LIVE NAVIGATION SCHEMA</div><small>structural edges are monochrome · active cross-system transfer is spectral</small></div>
+        <div className="graph-canvas sunken">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            fitView
+            fitViewOptions={{ padding: 0.15 }}
+            minZoom={0.35}
+            maxZoom={1.7}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            onNodeClick={(_, node) => setSelected(node.data as LayerData)}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background gap={22} size={1} />
+            <Controls showInteractive={false} />
+          </ReactFlow>
+        </div>
+      </section>
+
+      <aside className="ontology-inspector win-panel raised">
+        <div className="mini-title">LAYER INSPECTOR</div>
+        <div className={`inspector-source ${selected.source === 'system' ? 'system' : selected.source}`}>{selected.source.toUpperCase()} · {selected.kind}</div>
+        <h2>{selected.label}</h2>
+        <p>{selected.description || 'A navigable layer in the current ecosystem schema.'}</p>
+        {typeof selected.count === 'number' && <div className="layer-count"><b>{selected.count}</b><span>indexed items</span></div>}
+        <div className="geometry-key">
+          <div><span className="geo cube" />bounded system/layer</div>
+          <div><span className="geo lattice" />semantic knowledge</div>
+          <div><span className="geo arc" />active transfer</div>
+        </div>
+        <div className="inspector-actions">
+          <button onClick={exploreSelected}>Explore this layer</button>
+          {selected.url && <a href={selected.url} target="_blank" rel="noreferrer">Open source ↗</a>}
+        </div>
+      </aside>
     </div>
   );
 }

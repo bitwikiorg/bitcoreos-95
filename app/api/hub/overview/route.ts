@@ -1,0 +1,67 @@
+import { NextResponse } from 'next/server';
+import { HUB, stripHtml } from '@/lib/federated';
+
+async function read(path: string) {
+  const response = await fetch(`${HUB}${path}`, { next: { revalidate: 60 } });
+  if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+  return response.json();
+}
+
+export async function GET() {
+  const [latestResult, categoriesResult, topResult] = await Promise.allSettled([
+    read('/latest.json'),
+    read('/categories.json'),
+    read('/top.json?period=weekly'),
+  ]);
+
+  const latestData = latestResult.status === 'fulfilled' ? latestResult.value : null;
+  const categoriesData = categoriesResult.status === 'fulfilled' ? categoriesResult.value : null;
+  const topData = topResult.status === 'fulfilled' ? topResult.value : null;
+
+  const latest = (latestData?.topic_list?.topics ?? []).slice(0, 12).map((topic: any) => ({
+    id: topic.id,
+    title: topic.title,
+    slug: topic.slug,
+    url: `${HUB}/t/${topic.slug}/${topic.id}`,
+    posts: topic.posts_count,
+    views: topic.views,
+    categoryId: topic.category_id,
+    lastPostedAt: topic.last_posted_at,
+    tags: topic.tags ?? [],
+  }));
+
+  const categories = (categoriesData?.category_list?.categories ?? []).map((category: any) => ({
+    id: category.id,
+    name: category.name,
+    slug: category.slug,
+    description: stripHtml(category.description_text ?? category.description ?? ''),
+    topicCount: category.topic_count,
+    postCount: category.post_count,
+    position: category.position,
+    parentCategoryId: category.parent_category_id,
+    color: category.color,
+    url: `${HUB}/c/${category.slug}/${category.id}`,
+  }));
+
+  const top = (topData?.topic_list?.topics ?? []).slice(0, 8).map((topic: any) => ({
+    id: topic.id,
+    title: topic.title,
+    slug: topic.slug,
+    url: `${HUB}/t/${topic.slug}/${topic.id}`,
+    posts: topic.posts_count,
+    views: topic.views,
+    likeCount: topic.like_count,
+  }));
+
+  return NextResponse.json({
+    origin: HUB,
+    latest,
+    categories,
+    top,
+    health: {
+      latest: latestResult.status === 'fulfilled',
+      categories: categoriesResult.status === 'fulfilled',
+      top: topResult.status === 'fulfilled',
+    },
+  });
+}

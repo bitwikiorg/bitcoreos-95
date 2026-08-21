@@ -11,7 +11,8 @@ export type ResourceKind =
   | 'construct'
   | 'core'
   | 'node'
-  | 'workspace';
+  | 'workspace'
+  | 'change';
 
 export type Resource = {
   id: string;
@@ -20,13 +21,24 @@ export type Resource = {
   title: string;
   excerpt?: string;
   url: string;
-  tags?: string[];
+  tags?: Array<string | { id?: number; name?: string; slug?: string }>;
   author?: string;
   score?: number;
   metadata?: Record<string, unknown>;
 };
 
+export type SourceHealth = {
+  ok: boolean;
+  count: number;
+  error: string | null;
+  origin: string;
+};
+
 export type SearchResponse = {
   query: string;
   resources: Resource[];
+  sources: {
+    hub: SourceHealth;
+    wiki: SourceHealth;
+  };
 };
