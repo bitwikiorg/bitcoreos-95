@@ -12,7 +12,7 @@ async function searchHub(query: string): Promise<Resource[]> {
   const url = new URL('/search.json', HUB);
   url.searchParams.set('q', query);
   const response = await fetch(url, { next: { revalidate: 60 } });
-  if (!response.ok) return [];
+  if (!response.ok) throw new Error(`BIThub search failed: ${response.status}`);
   const data = await response.json();
   const topics = Array.isArray(data.topics) ? data.topics : [];
   return topics.slice(0, 12).map((topic: any) => ({
@@ -29,15 +29,17 @@ async function searchHub(query: string): Promise<Resource[]> {
 }
 
 async function searchWiki(query: string): Promise<Resource[]> {
-  const url = new URL('/api.php', WIKI);
+  // BITwiki's MediaWiki installation lives under /w; article URLs are rooted at /Title.
+  const url = new URL('/w/api.php', WIKI);
   url.searchParams.set('action', 'query');
   url.searchParams.set('list', 'search');
   url.searchParams.set('srsearch', query);
   url.searchParams.set('srlimit', '12');
   url.searchParams.set('format', 'json');
+  url.searchParams.set('formatversion', '2');
   url.searchParams.set('origin', '*');
   const response = await fetch(url, { next: { revalidate: 60 } });
-  if (!response.ok) return [];
+  if (!response.ok) throw new Error(`BITwiki search failed: ${response.status}`);
   const data = await response.json();
   const results = Array.isArray(data?.query?.search) ? data.query.search : [];
   return results.map((page: any) => ({
@@ -46,7 +48,7 @@ async function searchWiki(query: string): Promise<Resource[]> {
     kind: 'wiki-page',
     title: page.title,
     excerpt: stripHtml(page.snippet ?? ''),
-    url: `${WIKI}/wiki/${encodeURIComponent(String(page.title).replace(/ /g, '_'))}`,
+    url: `${WIKI}/${encodeURIComponent(String(page.title).replace(/ /g, '_'))}`,
     score: Number(page.size ?? 0),
     metadata: { pageId: page.pageid, wordCount: page.wordcount },
   }));
@@ -57,6 +59,10 @@ export async function GET(request: NextRequest) {
   if (!query) return NextResponse.json({ query, resources: [] });
 
   const [hub, wiki] = await Promise.allSettled([searchHub(query), searchWiki(query)]);
+
+  if (hub.status === 'rejected') console.error(hub.reason);
+  if (wiki.status === 'rejected') console.error(wiki.reason);
+
   const resources = [
     ...(hub.status === 'fulfilled' ? hub.value : []),
     ...(wiki.status === 'fulfilled' ? wiki.value : []),
