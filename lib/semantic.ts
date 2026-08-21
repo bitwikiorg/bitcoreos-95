@@ -27,15 +27,18 @@ export async function smwInfo() {
   }
 }
 
-function resultArray(data: any) {
-  const candidates = [data?.query, data?.results, data?.result, data?.browse];
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) return candidate;
-    if (candidate && typeof candidate === 'object') {
-      for (const value of Object.values(candidate)) if (Array.isArray(value)) return value;
-    }
+function findArray(value: unknown, depth = 0): any[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'object' || depth > 5) return [];
+  for (const nested of Object.values(value as Record<string, unknown>)) {
+    const found = findArray(nested, depth + 1);
+    if (found.length) return found;
   }
   return [];
+}
+
+function resultArray(data: any) {
+  return findArray(data?.query ?? data?.results ?? data?.result ?? data?.browse ?? data);
 }
 
 export async function semanticDirectory(search = '*', limit = 40) {
@@ -59,9 +62,21 @@ export async function semanticDirectory(search = '*', limit = 40) {
   };
 }
 
+export type SemanticFact = {
+  property: string;
+  direction: 'direct' | 'inverse' | string;
+  values: Array<{ type?: number; item: string }>;
+};
+
 export async function semanticSubject(title: string) {
   const subject = title.trim();
   if (!subject) throw new Error('missing_subject');
   const data = await smwBrowse('subject', { subject, ns: 0, iw: '' });
-  return { title: subject, raw: data };
+  const rawFacts = Array.isArray(data?.query?.data) ? data.query.data : [];
+  const facts: SemanticFact[] = rawFacts.map((fact: any) => ({
+    property: String(fact?.property || ''),
+    direction: String(fact?.direction || 'direct'),
+    values: (Array.isArray(fact?.dataitem) ? fact.dataitem : []).map((item: any) => ({ type: Number(item?.type) || undefined, item: String(item?.item || '') })).filter((item: any) => item.item),
+  })).filter((fact: SemanticFact) => fact.property && fact.values.length);
+  return { title: subject, facts, raw: data };
 }
