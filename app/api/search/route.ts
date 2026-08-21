@@ -3,6 +3,7 @@ import type { Resource } from '@/lib/resources';
 
 const HUB = process.env.BITHUB_URL ?? 'https://hub.bitwiki.org';
 const WIKI = process.env.BITWIKI_URL ?? 'https://bitwiki.org';
+const WIKI_HEADERS = { 'user-agent': 'BITCOREOS-95/0.1 (+https://bitwiki.org)' };
 
 function stripHtml(value = '') {
   return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -28,23 +29,8 @@ async function searchHub(query: string): Promise<Resource[]> {
   }));
 }
 
-async function searchWiki(query: string): Promise<Resource[]> {
-  const url = new URL('/w/api.php', WIKI);
-  url.searchParams.set('action', 'query');
-  url.searchParams.set('list', 'search');
-  url.searchParams.set('srsearch', query);
-  url.searchParams.set('srlimit', '12');
-  url.searchParams.set('format', 'json');
-  url.searchParams.set('formatversion', '2');
-  url.searchParams.set('origin', '*');
-  const response = await fetch(url, {
-    headers: { 'user-agent': 'BITCOREOS-95/0.1 (+https://bitwiki.org)' },
-    next: { revalidate: 60 },
-  });
-  if (!response.ok) throw new Error(`BITwiki search failed: ${response.status}`);
-  const data = await response.json();
-  const results = Array.isArray(data?.query?.search) ? data.query.search : [];
-  return results.map((page: any) => ({
+function wikiResource(page: any, mode: 'fulltext' | 'prefix'): Resource {
+  return {
     id: `wiki:${page.pageid}`,
     source: 'wiki',
     kind: 'wiki-page',
@@ -52,8 +38,38 @@ async function searchWiki(query: string): Promise<Resource[]> {
     excerpt: stripHtml(page.snippet ?? ''),
     url: `${WIKI}/${encodeURIComponent(String(page.title).replace(/ /g, '_'))}`,
     score: Number(page.size ?? 0),
-    metadata: { pageId: page.pageid, wordCount: page.wordcount },
-  }));
+    metadata: { pageId: page.pageid, wordCount: page.wordcount, searchMode: mode },
+  };
+}
+
+async function wikiApi(params: Record<string, string>) {
+  const url = new URL('/w/api.php', WIKI);
+  url.searchParams.set('action', 'query');
+  url.searchParams.set('format', 'json');
+  url.searchParams.set('formatversion', '2');
+  url.searchParams.set('origin', '*');
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+
+  const response = await fetch(url, {
+    headers: WIKI_HEADERS,
+    next: { revalidate: 60 },
+  });
+  if (!response.ok) throw new Error(`BITwiki search failed: ${response.status}`);
+  return response.json();
+}
+
+async function searchWiki(query: string): Promise<Resource[]> {
+  const fulltext = await wikiApi({ list: 'search', srsearch: query, srlimit: '12' });
+  const fulltextResults = Array.isArray(fulltext?.query?.search) ? fulltext.query.search : [];
+  if (fulltextResults.length) {
+    return fulltextResults.map((page: any) => wikiResource(page, 'fulltext'));
+  }
+
+  // BITwiki can have valid pages while the MediaWiki full-text index is sparse/stale.
+  // Prefix search remains useful for navigation and does not make the shell depend on that index.
+  const prefix = await wikiApi({ list: 'prefixsearch', pssearch: query, pslimit: '12' });
+  const prefixResults = Array.isArray(prefix?.query?.prefixsearch) ? prefix.query.prefixsearch : [];
+  return prefixResults.map((page: any) => wikiResource(page, 'prefix'));
 }
 
 function failureMessage(result: PromiseSettledResult<Resource[]>) {
