@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SESSION_COOKIE, verifySession } from '@/lib/session';
 import { USER_API_KEY_COOKIE, readDelegatedCredential } from '@/lib/delegated';
-import { listDelegatedConversations } from '@/lib/conversations';
+import { listDelegatedConversations, type ConversationSummary } from '@/lib/conversations';
 import { listPublicConversations } from '@/lib/public-conversations';
+
+function normalizeConversationAuthority(conversation: ConversationSummary): ConversationSummary {
+  if (conversation.kind !== 'chat-channel') return conversation;
+  return {
+    ...conversation,
+    context: {
+      ...conversation.context,
+      origin: { ...conversation.context.origin, substrate: 'public chat channel' },
+      authority: { ...conversation.context.authority, visibility: 'public' },
+    },
+  };
+}
 
 export async function GET(request: NextRequest) {
   const user = verifySession(request.cookies.get(SESSION_COOKIE)?.value);
@@ -22,7 +34,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const delegatedResult = await listDelegatedConversations(user.username, credential);
-    const conversations = [...publicResult.conversations, ...delegatedResult.conversations]
+    const delegated = delegatedResult.conversations.map(normalizeConversationAuthority);
+    const conversations = [...publicResult.conversations, ...delegated]
       .filter((item, index, rows) => rows.findIndex((candidate) => candidate.id === item.id) === index)
       .sort((a, b) => Date.parse(b.lastActivity || '0') - Date.parse(a.lastActivity || '0'));
 
