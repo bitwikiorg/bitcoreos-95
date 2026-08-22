@@ -1,3 +1,5 @@
+import type { ContextCapsule } from './context';
+
 export type ResourceSource = 'hub' | 'wiki';
 
 export type ResourceKind =
@@ -25,6 +27,7 @@ export type Resource = {
   author?: string;
   score?: number;
   metadata?: Record<string, unknown>;
+  context?: ContextCapsule;
 };
 
 export type ResourcePost = {

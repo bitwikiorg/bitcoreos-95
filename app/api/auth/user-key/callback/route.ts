@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
       createdAt: Date.now(),
     };
 
-    const response = NextResponse.redirect(new URL('/my', request.nextUrl.origin));
+    const target = handshake.returnPath?.startsWith('/') && !handshake.returnPath.startsWith('//') ? handshake.returnPath : '/my';
+    const response = NextResponse.redirect(new URL(target, request.nextUrl.origin));
     response.cookies.set(USER_API_KEY_COOKIE, seal(credential), {
       httpOnly: true,
       sameSite: 'lax',

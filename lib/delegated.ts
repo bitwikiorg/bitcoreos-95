@@ -20,6 +20,7 @@ export type UserApiHandshake = {
   username: string;
   scopes: string[];
   expiresAt: number;
+  returnPath?: string;
 };
 
 export function readDelegatedCredential(token?: string | null) {

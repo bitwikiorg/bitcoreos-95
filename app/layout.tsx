@@ -7,6 +7,7 @@ import './resource-reader.css';
 import './functionality.css';
 import './semantic-workspaces.css';
 import './identity-spaces.css';
+import './ask-federation.css';
 
 export const metadata: Metadata = {
   title: 'BITCOREOS-95',
