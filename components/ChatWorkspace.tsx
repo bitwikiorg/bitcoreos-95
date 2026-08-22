@@ -8,21 +8,68 @@ import type { ConversationKind, ConversationMessage, ConversationSummary } from 
 import { contextLabel } from '@/lib/context';
 
 type Message = { role: 'user' | 'assistant'; content: string };
-type Conversation = { id: string; title: string; messages: Message[]; updatedAt?: number };
+type Conversation = {
+  id: string;
+  title: string;
+  messages: Message[];
+  updatedAt?: number;
+  context: ContextCapsule;
+};
 type ConversationIndex = {
   viewer: string | null;
   delegated: boolean;
   scopes?: string[];
   conversations: ConversationSummary[];
 };
-type Filter = 'all' | 'local' | 'pm' | 'chat' | 'runs';
+type Filter = 'all' | 'mine' | 'local' | 'pm' | 'chat' | 'runs';
 
-const emptyConversation = (): Conversation => ({
-  id: `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-  title: 'New Ask',
-  messages: [],
-  updatedAt: Date.now(),
-});
+function localConversationContext(id: string, model?: string | null): ContextCapsule {
+  const modelId = model ? `model:${model.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : 'model:ask-runtime';
+  return {
+    id: `local-ai:${id}`,
+    kind: 'Local Ask conversation',
+    origin: {
+      plane: 'local',
+      substrate: 'browser-local conversation',
+      canonicalRef: `local:ask:${id}`,
+    },
+    identity: {
+      viewer: 'current-browser-user',
+      executor: { kind: 'model', id: modelId, label: model || 'Ask runtime' },
+    },
+    authority: { visibility: 'local', mode: 'ai-invoke' },
+    state: { execution: 'idle' },
+    capabilities: ['read', 'ask', 'research', 'persist-local'],
+    provenance: [],
+    metadata: { storage: 'browser-local' },
+  };
+}
+
+const emptyConversation = (): Conversation => {
+  const id = `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return {
+    id,
+    title: 'New Ask',
+    messages: [],
+    updatedAt: Date.now(),
+    context: localConversationContext(id),
+  };
+};
+
+function normalizeLocalConversation(value: any): Conversation | null {
+  if (!value || typeof value !== 'object') return null;
+  const id = typeof value.id === 'string' && value.id ? value.id : `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const messages = Array.isArray(value.messages)
+    ? value.messages.filter((message: any) => message && (message.role === 'user' || message.role === 'assistant') && typeof message.content === 'string')
+    : [];
+  return {
+    id,
+    title: typeof value.title === 'string' && value.title ? value.title : 'New Ask',
+    messages,
+    updatedAt: Number(value.updatedAt || Date.now()),
+    context: value.context?.origin && value.context?.authority ? value.context as ContextCapsule : localConversationContext(id),
+  };
+}
 
 function kindLabel(kind: ConversationKind) {
   if (kind === 'construct') return 'CONSTRUCT · PM';
@@ -36,7 +83,7 @@ function kindLabel(kind: ConversationKind) {
   return kind.toUpperCase();
 }
 
-function bucket(kind: ConversationKind): Filter {
+function bucket(kind: ConversationKind): Exclude<Filter, 'mine' | 'local'> {
   if (kind === 'pm' || kind === 'construct') return 'pm';
   if (kind.startsWith('chat-')) return 'chat';
   if (kind === 'core-run' || kind === 'node-run' || kind === 'mas') return 'runs';
@@ -89,10 +136,13 @@ export function ChatWorkspace() {
     try {
       const stored = localStorage.getItem('bitcoreos-chats');
       if (stored) {
-        const parsed = JSON.parse(stored) as Conversation[];
-        if (Array.isArray(parsed) && parsed.length) {
-          setConversations(parsed);
-          setActiveId(parsed[0].id);
+        const parsed = JSON.parse(stored);
+        const normalized = Array.isArray(parsed)
+          ? parsed.map(normalizeLocalConversation).filter((item): item is Conversation => Boolean(item))
+          : [];
+        if (normalized.length) {
+          setConversations(normalized);
+          setActiveId(normalized[0].id);
         }
       } else {
         setActiveId((current) => current || conversations[0].id);
@@ -119,10 +169,17 @@ export function ChatWorkspace() {
   }, [conversations, activeId]);
   const active = conversations[activeIndex] ?? conversations[0];
 
-  const visibleLocal = filter === 'all' || filter === 'local' ? conversations : [];
+  const visibleLocal = filter === 'all' || filter === 'mine' || filter === 'local' ? conversations : [];
   const visibleRemote = remoteIndex.conversations.filter((conversation) => {
     if (filter === 'all') return true;
     if (filter === 'local') return false;
+    if (filter === 'mine') {
+      const viewer = remoteIndex.viewer;
+      if (!viewer) return false;
+      if (conversation.context.identity?.viewer === viewer) return true;
+      if (conversation.context.identity?.author === viewer) return true;
+      return Boolean(conversation.context.identity?.participants?.includes(viewer));
+    }
     return bucket(conversation.kind) === filter;
   });
 
@@ -174,6 +231,31 @@ export function ChatWorkspace() {
     }));
   }
 
+  function updateActiveContext(resources: Resource[], modelName: string | null, execution: string) {
+    setConversations((list) => list.map((conversation) => {
+      if (conversation.id !== active.id) return conversation;
+      const nextContext = localConversationContext(conversation.id, modelName);
+      return {
+        ...conversation,
+        context: {
+          ...nextContext,
+          state: { ...nextContext.state, execution },
+          provenance: resources.slice(0, 16).map((resource) => ({
+            relation: 'references' as const,
+            targetId: resource.context?.id || resource.id,
+            targetKind: resource.context?.kind || resource.kind,
+            label: resource.title,
+          })),
+          metadata: {
+            ...nextContext.metadata,
+            evidenceCount: resources.length,
+            lastUpdatedAt: new Date().toISOString(),
+          },
+        },
+      };
+    }));
+  }
+
   async function send(event: FormEvent) {
     event.preventDefault();
     if (activeRemote) return;
@@ -192,8 +274,11 @@ export function ChatWorkspace() {
         body: JSON.stringify({ messages: next }),
       });
       const data = await response.json();
-      setEvidence(Array.isArray(data?.evidence) ? data.evidence : []);
-      setModel(data?.model ?? null);
+      const turnEvidence = Array.isArray(data?.evidence) ? data.evidence as Resource[] : [];
+      const modelName = typeof data?.model === 'string' ? data.model : null;
+      setEvidence(turnEvidence);
+      setModel(modelName);
+      updateActiveContext(turnEvidence, modelName, response.ok ? 'ready' : 'partial');
       if (!response.ok) {
         const fallback = data?.error === 'ai_gateway_not_configured'
           ? 'Relevant sources were found, but this conversation runtime is unavailable right now.'
@@ -205,6 +290,7 @@ export function ChatWorkspace() {
         setNotice('Ready');
       }
     } catch {
+      updateActiveContext([], model, 'interrupted');
       updateActive([...next, { role: 'assistant', content: 'This conversation is temporarily unavailable.' }]);
       setNotice('Connection interrupted');
     } finally {
@@ -219,6 +305,17 @@ export function ChatWorkspace() {
     router.push('/research');
   }
 
+  function researchLocal() {
+    if (!active.messages.length) return;
+    const transcript = active.messages
+      .map((message) => `${message.role === 'user' ? 'USER' : 'ASSISTANT'}:\n${message.content}`)
+      .join('\n\n')
+      .slice(-6200);
+    sessionStorage.setItem('bitcoreos-context-object', JSON.stringify(active.context));
+    sessionStorage.setItem('bitcoreos-research-seed', `Research and distill this local Ask conversation: ${active.title}\n\n${transcript}`);
+    router.push('/research');
+  }
+
   const remoteContext: ContextCapsule | null = activeRemote?.context || null;
 
   return (
@@ -226,7 +323,7 @@ export function ChatWorkspace() {
       <aside className="chat-sidebar win-panel raised">
         <div className="panel-heading"><div>ASK HISTORY</div><button onClick={newChat}>+ New</button></div>
         <div className="conversation-filters" aria-label="Conversation filters">
-          {(['all', 'local', 'pm', 'chat', 'runs'] as Filter[]).map((value) => (
+          {(['all', 'mine', 'local', 'pm', 'chat', 'runs'] as Filter[]).map((value) => (
             <button key={value} data-active={filter === value} onClick={() => setFilter(value)}>{filterLabel(value)}</button>
           ))}
         </div>
@@ -259,7 +356,7 @@ export function ChatWorkspace() {
       <section className="chat-main win-panel raised">
         <div className="panel-heading chat-heading">
           <div><span className="signal-dot" />{activeRemote ? activeRemote.title : 'ASK'}</div>
-          <small>{activeRemote ? contextLabel(activeRemote.context) : (model ?? notice)}</small>
+          <small>{activeRemote ? contextLabel(activeRemote.context) : contextLabel(active.context)}</small>
         </div>
         <div className="message-stream sunken">
           {!activeRemote && active.messages.length === 0 && (
@@ -298,7 +395,13 @@ export function ChatWorkspace() {
         {!activeRemote ? (
           <form className="chat-composer" onSubmit={send}>
             <textarea value={input} onChange={(event) => setInput(event.target.value)} rows={3} placeholder="Ask anything, or describe what you want to understand…" />
-            <div className="composer-row"><span>{notice}</span><button className="spectral-button" disabled={loading || !input.trim()} type="submit">{loading ? 'Working…' : 'Send'}</button></div>
+            <div className="composer-row">
+              <span>{model ?? notice}</span>
+              <div className="composer-actions">
+                <button type="button" onClick={researchLocal} disabled={!active.messages.length}>Research conversation</button>
+                <button className="spectral-button" disabled={loading || !input.trim()} type="submit">{loading ? 'Working…' : 'Send'}</button>
+              </div>
+            </div>
           </form>
         ) : (
           <div className="remote-conversation-actions">
@@ -314,8 +417,8 @@ export function ChatWorkspace() {
       <aside className="evidence-panel win-panel raised">
         {!activeRemote ? (
           <>
-            <div className="mini-title">EVIDENCE // CURRENT TURN</div>
-            <div className="evidence-summary">{evidence.length ? `${evidence.length} resources retrieved` : 'Sources appear here when local Ask retrieves them.'}</div>
+            <div className="mini-title">LOCAL CONTEXT // {active.context.authority.visibility.toUpperCase()}</div>
+            <div className="evidence-summary">{evidence.length ? `${evidence.length} resources retrieved` : 'Sources appear here when this conversation retrieves them.'}</div>
             <div className="evidence-list">
               {evidence.map((resource, index) => {
                 const label = `${resource.source === 'hub' ? 'H' : 'W'}${index + 1}`;
@@ -327,6 +430,15 @@ export function ChatWorkspace() {
                 );
               })}
             </div>
+            <details className="context-details local-context-details">
+              <summary>Conversation identity + provenance</summary>
+              <ContextRow label="Origin" value={active.context.origin.plane} />
+              <ContextRow label="Transport" value={active.context.origin.substrate} />
+              <ContextRow label="Visibility" value={active.context.authority.visibility} />
+              {active.context.identity?.executor?.label && <ContextRow label="Executor" value={active.context.identity.executor.label} />}
+              <div className="context-capabilities">{active.context.capabilities.map((capability) => <span key={capability}>{capability}</span>)}</div>
+              {active.context.provenance?.map((relation, index) => <div className="context-relation" key={`${relation.relation}-${index}`}>{relation.relation} → {relation.label || relation.targetId}</div>)}
+            </details>
           </>
         ) : (
           <div className="conversation-context-panel">
