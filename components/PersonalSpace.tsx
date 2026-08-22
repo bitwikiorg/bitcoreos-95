@@ -8,7 +8,7 @@ type Personal = {
   profile: { name?: string; avatarTemplate?: string; trustLevel: number; topicCount: number; postCount: number; likesReceived: number; likesGiven: number; daysVisited: number };
   hub: { topics: any[]; posts: any[] };
   wiki: { namespace: { exists: boolean; title: string; url: string }; contributions: any[] };
-  delegated: { connected: boolean; scopes: string[]; notifications: any[] };
+  delegated: { connected: boolean; scopes: string[]; notifications: any[]; bookmarks?: any[]; tracking?: any[]; watching?: any[] };
 };
 
 type Tab = 'trail' | 'wiki' | 'inbox';
@@ -34,6 +34,8 @@ export function PersonalSpace() {
       if (authData?.user) {
         const response = await fetch('/api/me/overview', { credentials: 'include', cache: 'no-store' });
         if (response.ok) setData(await response.json());
+      } else {
+        setData(null);
       }
     } finally { setLoading(false); }
   }
@@ -48,29 +50,48 @@ export function PersonalSpace() {
     await load();
   }
 
-  if (loading) return <div className="personal-loading">Loading your workspace…</div>;
+  if (loading) return <div className="personal-loading">Loading workspace…</div>;
 
   if (!auth.user) {
     return (
-      <div className="personal-gate win-panel raised">
-        <div className="mini-title">MY BITHUB</div>
-        <h1>Your work, without the forum maze.</h1>
-        <p>Topics, replies, matching BITwiki activity, and delegated user state can be organized here around your BIThub identity.</p>
-        {auth.configured
-          ? <a className="spectral-button inline-action" href="/api/auth/login">Sign in with BIThub</a>
-          : <div className="gate-note">Identity wiring is implemented, but the production DiscourseConnect secrets are not configured yet.</div>}
+      <div className="personal-space anonymous-space">
+        <header className="personal-header win-panel raised">
+          <div className="personal-identity">
+            <div className="avatar-fallback anonymous-avatar">◇</div>
+            <div><div className="mini-title">MY BITHUB // PUBLIC SESSION</div><h1>Anonymous</h1><p>@anonymous · public access</p></div>
+          </div>
+          <div className="personal-metrics" aria-label="Anonymous access state">
+            <StatusToken label="Access" value="PUBLIC" />
+            <StatusToken label="Mode" value="READ" />
+            <StatusToken label="Identity" value="GUEST" />
+          </div>
+        </header>
+
+        <section className="personal-body win-panel raised anonymous-body">
+          <div className="anonymous-primary">
+            <div className="mini-title">ANONYMOUS WORKSPACE</div>
+            <h2>Use the public ecosystem immediately.</h2>
+            <p>Ask across BIThub and BITwiki, research missing knowledge, browse discussions and system surfaces, or sign in to attach your BIThub identity and organize your own work.</p>
+            <div className="anonymous-actions">
+              <a className="spectral-button inline-action" href="/api/auth/login">Sign in with BIThub</a>
+              <a className="inline-action" href="/ask">Ask</a>
+              <a className="inline-action" href="/research">Research</a>
+              <a className="inline-action" href="/explorer">Explore</a>
+            </div>
+          </div>
+          <div className="anonymous-capabilities">
+            <div><b>Available now</b><span>Public search, source reading, Ask, Research, feeds, spaces, agents, and knowledge graph.</span></div>
+            <div><b>After BIThub sign-in</b><span>Your topics, replies, contribution trail, BITwiki identity projection, and user-scoped state.</span></div>
+          </div>
+        </section>
       </div>
     );
   }
 
-  if (!data) return <div className="personal-gate win-panel raised">Unable to load the personal projection.</div>;
+  if (!data) return <div className="personal-gate win-panel raised">Unable to load your workspace.</div>;
 
   const avatar = avatarUrl(data.profile.avatarTemplate) || auth.user.avatarUrl || '';
-  const mix = {
-    topics: data.hub.topics.length,
-    replies: data.hub.posts.length,
-    wiki: data.wiki.contributions.length,
-  };
+  const mix = { topics: data.hub.topics.length, replies: data.hub.posts.length, wiki: data.wiki.contributions.length };
   const mixTotal = Math.max(1, mix.topics + mix.replies + mix.wiki);
 
   return (
@@ -91,14 +112,14 @@ export function PersonalSpace() {
       <nav className="personal-tabs" aria-label="Personal workspace views">
         <button data-active={tab === 'trail'} onClick={() => setTab('trail')}>Contribution trail</button>
         <button data-active={tab === 'wiki'} onClick={() => setTab('wiki')}>BITwiki</button>
-        <button data-active={tab === 'inbox'} onClick={() => setTab('inbox')}>Inbox</button>
+        <button data-active={tab === 'inbox'} onClick={() => setTab('inbox')}>Saved + inbox</button>
       </nav>
 
       <section className="personal-body win-panel raised">
         {tab === 'trail' && (
           <div className="trail-view">
             <div className="contribution-mix" aria-label="Recent contribution mix">
-              <div className="mix-copy"><b>Recent contribution mix</b><span>Real retrieved activity, not an XP score.</span></div>
+              <div className="mix-copy"><b>Recent contribution mix</b><span>Retrieved activity, not an XP score.</span></div>
               <div className="mix-track">
                 <span className="mix-topic" style={{ width: `${(mix.topics / mixTotal) * 100}%` }} />
                 <span className="mix-reply" style={{ width: `${(mix.replies / mixTotal) * 100}%` }} />
@@ -119,11 +140,11 @@ export function PersonalSpace() {
             <div className="namespace-card">
               <div className="mini-title">MATCHING USER NAMESPACE</div>
               <h2>{data.wiki.namespace.title}</h2>
-              <p>{data.wiki.namespace.exists ? 'A public MediaWiki User: page exists under the same username. This is a provisional username match until BIThub and BITwiki share a verified identity bridge.' : 'No public User: page exists under the same username. Once Hub/Wiki identity is unified, this namespace can become a durable user-owned knowledge surface.'}</p>
+              <p>{data.wiki.namespace.exists ? 'A public MediaWiki User: page exists under the same username. This remains a username match until BIThub and BITwiki share a verified identity bridge.' : 'No public User: page exists under the same username. A unified Hub/Wiki identity can later make this a durable user-owned knowledge surface.'}</p>
               <a href={data.wiki.namespace.url} target="_blank" rel="noreferrer">Open namespace ↗</a>
             </div>
             <div className="wiki-contrib-list">
-              <div className="personal-section-head"><div><b>Matching wiki contributions</b><span>MediaWiki contribution history for the same username; provisional until identity bridging is verified.</span></div></div>
+              <div className="personal-section-head"><div><b>Matching wiki contributions</b><span>MediaWiki contribution history for the same username.</span></div></div>
               {data.wiki.contributions.map((item) => (
                 <a className="wiki-contrib-row" href={item.url} target="_blank" rel="noreferrer" key={`${item.id}-${item.title}`}>
                   <strong>{item.title}</strong><span>{item.comment || 'edit'}</span><small>{item.timestamp ? new Date(item.timestamp).toLocaleDateString() : ''}{item.sizeDiff ? ` · ${item.sizeDiff > 0 ? '+' : ''}${item.sizeDiff} bytes` : ''}</small>
@@ -137,16 +158,16 @@ export function PersonalSpace() {
         {tab === 'inbox' && (
           <div className="inbox-view">
             <div className="delegated-card">
-              <div className="mini-title">DELEGATED BITHUB ACCESS</div>
+              <div className="mini-title">PRIVATE BITHUB STATE</div>
               {data.delegated.connected ? (
-                <><h2>Connected as @{data.username}</h2><p>BITCOREOS-95 has a scoped user API key for this browser session family: {data.delegated.scopes.join(', ') || 'read'}.</p><button onClick={disconnect}>Disconnect + revoke</button></>
+                <><h2>Connected as @{data.username}</h2><p>Scoped BIThub access is active for this session.</p><button onClick={disconnect}>Disconnect</button></>
               ) : (
-                <><h2>Public projection only</h2><p>Your public posts already work through native APIs. Connect scoped access to surface notifications and other user-only state without using an administrator key.</p><a className="spectral-button inline-action" href="/api/auth/user-key/start">Connect scoped BIThub access</a></>
+                <><h2>Public identity connected</h2><p>Connect private state to bring saved topics, tracking, watching, and notifications into this workspace.</p><a className="spectral-button inline-action" href="/api/auth/user-key/start">Connect private state</a></>
               )}
             </div>
             <div className="notification-list">
               {data.delegated.notifications.map((item) => <div className="notification-row" key={item.id}><b>{item.read ? 'read' : 'new'}</b><span>{item.data?.topic_title || item.data?.display_username || `Notification ${item.id}`}</span><small>{item.createdAt ? new Date(item.createdAt).toLocaleString() : ''}</small></div>)}
-              {data.delegated.connected && !data.delegated.notifications.length && <div className="quiet-empty">No notifications returned for the delegated scope.</div>}
+              {data.delegated.connected && !data.delegated.notifications.length && <div className="quiet-empty">No recent notifications.</div>}
             </div>
           </div>
         )}
@@ -157,6 +178,10 @@ export function PersonalSpace() {
 
 function Metric({ label, value }: { label: string; value: number }) {
   return <div className="metric-token"><b>{value.toLocaleString()}</b><span>{label}</span></div>;
+}
+
+function StatusToken({ label, value }: { label: string; value: string }) {
+  return <div className="metric-token status-token"><b>{value}</b><span>{label}</span></div>;
 }
 
 function ActivityRow({ item }: { item: any }) {
