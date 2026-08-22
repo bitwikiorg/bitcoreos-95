@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { federatedSearch } from '@/lib/federated';
 import { hydrateResources } from '@/lib/hydration';
+import { getB8Agents } from '@/lib/agents';
 import type { HydratedResource, Resource } from '@/lib/resources';
 
 const WINDOW_MS = 5 * 60 * 1000;
@@ -23,7 +24,7 @@ function limited(request: NextRequest) {
   return current.count > MAX_REQUESTS;
 }
 
-function publicFocus(value: any): Resource | null {
+async function publicFocus(value: any): Promise<Resource | null> {
   if (!value || typeof value !== 'object') return null;
   if (value.source !== 'hub' && value.source !== 'wiki') return null;
   if (value.context?.authority?.visibility && value.context.authority.visibility !== 'public') return null;
@@ -32,6 +33,17 @@ function publicFocus(value: any): Resource | null {
   if (!title) return null;
 
   if (value.source === 'hub') {
+    const registryIndex = Number(value?.metadata?.registryIndex);
+    if (Number.isInteger(registryIndex) && registryIndex > 0 && ['construct', 'agent', 'persona'].includes(String(value?.kind || ''))) {
+      try {
+        const registry = await getB8Agents();
+        const canonical = registry.resources.find((resource) => Number(resource.metadata?.registryIndex) === registryIndex);
+        return canonical || null;
+      } catch {
+        return null;
+      }
+    }
+
     const topicId = Number(value?.metadata?.topicId || String(value?.id || '').replace(/^hub:/, '').split(':')[0]);
     if (!Number.isInteger(topicId) || topicId <= 0) return null;
     return {
@@ -76,7 +88,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}));
   const messages = Array.isArray(body?.messages) ? body.messages as ChatMessage[] : [];
-  const focus = publicFocus(body?.focus);
+  const focus = await publicFocus(body?.focus);
   const clean = messages
     .filter((message) => message && (message.role === 'user' || message.role === 'assistant') && typeof message.content === 'string')
     .slice(-12)
@@ -109,7 +121,9 @@ export async function POST(request: NextRequest) {
     'Answer using the supplied public source content as the authority for claims about BIThub and BITwiki.',
     focus ? 'The first evidence object was explicitly selected by the user. Treat it as the focus object, while still reconciling it with other relevant evidence.' : '',
     'Search snippets are discovery signals; hydrated source content is stronger evidence.',
+    'A registry actor focus is canonicalized server-side from the B8 registry even when its body is represented as bounded registry metadata rather than a topic hydration.',
     'Do not invent private content, permissions, user data, platform features, or source facts.',
+    'Do not infer invocation or messaging authority from the existence of an actor identity.',
     'If evidence is insufficient, say what is missing and suggest a narrower search.',
     'Cite evidence inline with bracket labels such as [H1] and [W2].',
     'Prefer concise operational explanations and direct navigation guidance.',
