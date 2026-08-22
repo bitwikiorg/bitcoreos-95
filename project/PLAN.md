@@ -2,229 +2,256 @@
 
 Updated: 2026-08-21
 
-## Canonical product loop
+## Product identity
 
-`find -> understand -> request -> execute -> observe -> review -> crystallize -> reuse`
+BITCOREOS-95 is the unified interaction projection of BIThub + BITwiki. The user should not have to think of the shell, BIThub, and BITwiki as separate products.
 
-BITCOREOS-95 is the interface across that loop. BIThub remains the live work plane and BITwiki remains the durable knowledge plane.
+Authoritative state still remains where it belongs:
 
-## First-class user surfaces
+- Discourse / BIThub: live discussion, PMs, Chat, users, groups, categories, tags, notifications, interaction state, bot/agent work trails.
+- MediaWiki / BITwiki: durable pages, revisions, categories, semantic assertions, user namespaces, and canonical knowledge.
+- Cargo: bounded operational records when deployed and healthy.
+- n8n: guarded privileged execution, sensitive writes, secrets, retries, and multi-system transactions.
+- local runtimes / MAS factories: ephemeral execution and conversation state until deliberately persisted elsewhere.
 
-The primary product grammar is intentionally small:
+## First-class grammar: verbs, not systems
 
-- **Ask** — understand the ecosystem and evidence conversationally.
-- **Research** — identify what knowledge work is actually needed and prepare/dispatch it.
-- **Explore** — navigate live work, durable knowledge, curated BIThub spaces, agents, feeds, and semantic relations.
+The top-level product grammar is intentionally small:
 
-Contextual surfaces:
+- **Ask** — converse with any supported conversational object or runtime.
+- **Research** — turn any object, question, gap, or conversation into structured knowledge work.
+- **Explore** — find and navigate any object in the ecosystem.
 
-- **My BIThub** — personal contribution/state workspace after identity is attached; anonymous mode remains useful without login.
-- **Knowledge Graph** — a secondary Explore mode for schema/relationship navigation, not a competing first-class app.
-- **Lander** — sparse orientation only.
+The lander remains sparse orientation.
 
-## Canonical architecture
+Identity is global shell state, not a competing top-level destination. "Mine" is a filter/projection available inside every mode.
 
-### Read plane
+Knowledge Graph is a secondary Explore projection, not a first-class app.
 
-- BIThub public reads: native Discourse APIs.
-- BIThub category/space streams: native Discourse category JSON.
-- BITwiki public reads: MediaWiki REST / Action API.
-- Semantic navigation: per-subject Semantic MediaWiki relations first; broader directories/Concepts only where the live runtime actually supports them.
-- Operational knowledge-request state: Cargo when live and healthy; source-controlled `wiki-content` remains the canonical fallback/source truth when runtime tables lag deployment.
+## Recursive object model
 
-### Identity plane
+Every object shown anywhere in BITCOREOS-95 must carry the same contextual envelope:
 
-- Anonymous: explicit guest/public-read identity state.
-- DiscourseConnect SSO: verified BIThub user identity.
-- BITCOREOS signed session: local projection of verified identity.
-- Delegated Discourse User API Key: user-scoped private API authority.
-- Future BITwiki identity bridge: required before same-username MediaWiki `User:` namespace data is treated as verified ownership rather than a provisional projection.
+- `id` — stable local normalized ID plus authoritative source ID.
+- `kind` — what the object is.
+- `origin` — hub, wiki, local runtime, n8n, external adapter.
+- `substrate` — topic, post, PM, chat channel, chat DM, chat thread, chat message, CORE activation, Construct, Node, agent, wiki page, SMW subject, Property, category, Cargo record, artifact, workflow, research request, local conversation, MAS run, etc.
+- `identity` — actor/owner/participants plus current viewer identity.
+- `authority` — public/private/group/local visibility, required auth, delegated scopes, mutation path.
+- `provenance` — source URL/ID, parent object, derived-from, produced-by, canonicalizes/revises/projects relations, timestamps.
+- `state` — unread/read, tracked/watched/bookmarked, lifecycle/execution state where applicable.
+- `capabilities` — actions actually allowed for this object and current authority.
 
-### Execution plane
+This envelope is recursive: a user can own conversations; a conversation can activate a CORE; a CORE activation can produce an artifact; an artifact can support a research request; a research request can revise a wiki page; the page can expose SMW relations back to all of those objects.
 
-- n8n: privileged action broker and policy boundary.
-- Agent execution: existing B8-compatible agent interfaces / registries.
-- Canonical BITwiki content writes: source-controlled `wiki-content` workflow rather than unsynchronized live edits.
+## Ask = universal conversation mode
 
-## Milestones
+Ask is not only a local AI chat.
 
-### M1 — Resource hydration + internal readers
+Supported conversation substrates should converge into one conversation UI while retaining explicit source badges and authority:
 
-Completed application layer:
+1. **Local Ask** — ephemeral/local model conversation grounded in Hub/Wiki evidence.
+2. **Discourse PM** — private-message topic, including AI/bot PMs.
+3. **Discourse Chat channel** — short-form channel conversation.
+4. **Discourse Chat DM** — direct-message channel.
+5. **Discourse Chat thread** — threaded chat conversation.
+6. **CORE activation** — an ordinary topic/post/reply trail used as an activator and execution conversation for a CORE.
+7. **Construct / bot conversation** — PM, Chat DM, topic, or other authoritative substrate involving a registered Construct/agent.
+8. **Node interaction** — task-specific interaction with provenance to its workflow/runtime.
+9. **Local MAS factory/session** — local multi-agent conversation/run, optionally persisted into Hub/Wiki later.
+10. **n8n-mediated workflow conversation/status** — execution events projected conversationally where useful, without pretending n8n is the canonical discussion store.
 
-- Full BIThub topic/post hydration.
-- Full BITwiki page hydration.
-- Internal Explore reader.
-- Hydrated Ask evidence.
-- Hydrated Research evidence.
+A conversation card must answer immediately:
 
-### M2 — Identity + personal BIThub
+`what is this? · where does it live? · who is speaking? · who can read it? · what activated it? · what did it produce?`
 
-Application layer substantially complete:
+### CORE semantics
 
-- Anonymous user state.
-- Production DiscourseConnect configuration and login redirect.
-- Signed BIThub identity session.
-- Scoped Discourse User API Key authorization.
-- Notifications.
-- Bookmarks/tracked/watched topics.
-- Public contribution trail and real contribution indicators.
-- Provisional same-username BITwiki User: namespace/contribution projection.
+A CORE is a workflow/cognition capability and activator, not merely a category.
 
-Verification gates:
+The Discourse Cores category may be used to discover definitions and existing activations, but the semantic object is the CORE plus its activations/output trail.
 
-- Complete a real DiscourseConnect callback round trip.
-- Complete a real User API Key approval round trip.
-- Verify My BIThub with real private user state.
+An activation may use normal Discourse topics/posts/replies. In Ask it appears as a conversation with `substrate=core_activation`; in Explore the same underlying objects can appear as CORE definitions, activations, topics, or outputs; in Research the CORE can be selected as an executor.
 
-### M3 — Agent registry + capability projection
+## Explore = universal object navigation
 
-Completed application layer:
+Explore should navigate both live-work and durable-knowledge objects without making the user choose a product first.
 
-- Read the canonical BIThub agent registry used by `agent.b8-plugin`.
-- Surface agents/constructs as navigable resources.
-- Reuse the B8 capability vocabulary instead of inventing a parallel agent API.
-- Distinguish public read tools from authenticated write/dispatch tools.
-- Distinguish registry-only identities from real Discourse users.
+Primary object families:
 
-### M4 — Canonical Research state
+### Discourse / BIThub
 
-Application layer substantially complete:
-
-- Research request taxonomy:
-  - new page
-  - revision
-  - category/navigation
-  - SMW semantic model
-  - Lua/computed projection
-  - reusable artifact
-  - coverage audit
-- Duplicate/existing-page/request preflight.
-- Current target SMW fact inspection.
-- Canonical knowledge lifecycle:
-  `requested -> researching -> drafting -> review -> satisfied | declined`.
-- Separate execution lifecycle:
-  `queued -> dispatched -> running -> waiting -> failed -> completed`.
-- Cargo-first request-state adapter with explicit `wiki-content` fallback.
-
-Infrastructure gate:
-
-- Repair/deploy live Cargo `Knowledge_requests` before Cargo can be trusted as runtime request-state authority.
-
-### M5 — n8n action broker
-
-Application contract complete:
-
-- action
-- actor
-- target
-- payload
-- source context
-- correlation ID
-- idempotency key
-- risk class
-- requested timestamp
-- HMAC request signing
-- allowlisted actions
-
-n8n owns secrets, sensitive writes, validation, jailbreak/prompt-injection-sensitive execution, retries, cross-system transactions, and verification.
-
-Infrastructure gate:
-
-- Connect the production n8n endpoint/secret and verify action reconciliation.
-
-### M6 — Real Deploy Research
-
-Next major functional milestone:
-
-- Preflight internal corpus.
-- Decide whether the needed output is a page, revision, category/navigation change, semantic model, Lua/computed projection, reusable artifact, or coverage request set.
-- Create/update the authoritative Requested Knowledge record.
-- Create or attach a BIThub research work trail.
-- Dispatch appropriate B8-compatible agents/workflows through guarded execution.
-- Observe execution state independently from knowledge state.
-- Collect evidence/artifacts.
-- Move through drafting/review.
-- Produce a candidate source-controlled BITwiki change.
-- Preserve provenance between request, BIThub work, agents, evidence, draft, schema/projection changes, and canonical page.
-
-### M7 — Semantic ontology + provenance
-
-- Continue replacing broad category topology with authoritative semantic relations.
-- Use real per-subject SMW assertions in readers and graph traversal.
-- Add cross-system relations such as:
-  - discusses
-  - defines
-  - produces
-  - references
-  - derived-from
-  - requested-by
-  - executed-by
-  - canonicalizes
-  - revises
-  - projects
-- Make provenance navigable in both directions.
-
-## Canonical navigation vocabulary
-
-Explore should expose real BIThub system spaces without duplicating their state:
-
-- Discussions → Community
-- Nodes → Nodes
-- Cores → Cores
-- Markets → Marketplace
-- Artifacts → Artifacts
-- Workspaces → Workspaces
-- Feeds → Feeds
-- BITCOREOS → BITCOREOS
-
-These are user-facing aliases/entry points over authoritative Discourse categories, not another taxonomy.
-
-## Canonical personal-space model
-
-My BIThub is allowed to be denser than the lander because its purpose is organization.
-
-Canonical personal projections:
-
-- contribution trail
-- topics/replies
-- real participation metrics
-- saved/bookmarked topics
-- tracked/watched topics
+- topics
+- posts/replies
+- private-message topics
+- users
+- groups/memberships
+- categories/subcategories
+- tags
+- search results
+- user activity/actions
 - notifications
-- provisional BITwiki User: namespace/contributions
-- future owned/requested research work once provenance is authoritative
+- bookmarks
+- tracked/watched topics and read state
+- badges / real gamification state
+- polls
+- uploads/attachments
+- drafts where delegated APIs permit
+- native Chat channels
+- native Chat direct-message channels
+- Chat messages
+- Chat threads
+- Chat drafts
+- Chat pins
+- Chat memberships
+- Chat reactions/interactions
+- Chat search/read state/notification settings
+- CORE definitions + activations
+- Nodes
+- Constructs/agents
+- artifacts
+- workspaces
+- feeds
+- markets/marketplace surfaces
 
-Any gamified layer must represent real activity/state. Do not add arbitrary XP, levels, or scores merely for decoration.
+### MediaWiki / BITwiki
 
-## Canonical now
+- pages
+- sections
+- revisions/history
+- categories
+- templates
+- Lua modules
+- SMW subjects
+- SMW Properties and assertions
+- semantic query results
+- Concepts when actually deployed
+- Cargo tables/rows
+- backlinks/links
+- user namespaces
+- user contributions
+- requested-knowledge records
+- provenance links to Hub work, agents, artifacts, and research runs
 
-- Ask
-- Research
-- Explore
-- My BIThub
-- Search/feed/internal source readers
-- curated native BIThub Spaces
-- secondary Knowledge Graph
-- DiscourseConnect identity
-- delegated user authority
-- B8 agent registry/capability family
-- n8n privileged action broker
-- Requested Knowledge lifecycle
-- SMW subject relations
-- Hub/Wiki/agent/research provenance direction
+### Runtime / execution
 
-## Possibilities, not commitments
+- research requests
+- workflow runs
+- local MAS sessions
+- n8n jobs/status
+- evidence packets
+- candidate drafts/artifacts
 
-- vector/embedding search
-- personalized recommendation feeds
-- live agent presence visualization
-- MessageBus-powered realtime UI
-- collaborative notebooks
-- automatic publish without review
-- coverage heatmaps
-- knowledge health dashboards
-- PWA/offline mode
-- public BITCOREOS MCP/API
+"Hub" and "Wiki" remain filters/origin facets, not top-level conceptual silos.
 
-Do not promote a possibility into the canonical plan until a concrete user need and an authoritative state owner are identified.
+## Research = universal transformation mode
+
+Research can start from:
+
+- free user intent
+- an Ask conversation
+- a PM or Chat thread
+- a CORE activation
+- a Construct/Node interaction
+- a Hub topic/post
+- a Wiki page/section/category
+- an SMW subject/property gap
+- a Cargo request
+- an artifact
+- a local MAS run
+- a coverage audit
+
+Research must decide what durable output is actually needed:
+
+- new BITwiki page
+- revision to existing page
+- new/changed category/navigation
+- SMW Property/schema/assertion work
+- Lua/template/computed projection
+- reusable artifact
+- requested-knowledge record/set
+- evidence/provenance repair
+- no new page because existing knowledge already satisfies the intent
+
+Knowledge lifecycle and execution lifecycle remain separate.
+
+## Identity is recursive and global
+
+The shell always has a current viewer identity:
+
+- Anonymous
+- verified Discourse user via DiscourseConnect
+- delegated Discourse authority via User API Key
+- future verified MediaWiki-linked identity
+
+Every object also exposes its own actor identity:
+
+- human user
+- bot
+- Construct
+- CORE
+- Node
+- agent/MAS
+- system/runtime
+
+Personal organization is a lens, not another product:
+
+- Ask → My conversations / unread / bots / CORE activations / local sessions
+- Research → My requests / reviews / executions / outputs
+- Explore → My posts / replies / saved / watched / notifications / wiki edits / user namespace / badges / contributions
+
+Clicking the global identity control may open a denser profile/workspace drawer, but it must not duplicate the three primary modes.
+
+## Authority model
+
+- Public reads: direct native APIs.
+- Identity: DiscourseConnect SSO.
+- Private/user-scoped reads: delegated Discourse User API Key.
+- Sensitive writes and multi-system mutations: n8n by default.
+- Canonical BITwiki knowledge writes: source-controlled `wiki-content` workflow unless an explicitly governed runtime path replaces it.
+- Local runtime state remains local until a deliberate persistence action creates an authoritative Hub/Wiki object.
+
+## Provenance relations
+
+Canonical relation vocabulary should include at minimum:
+
+- `authored-by`
+- `participant-in`
+- `reply-to`
+- `thread-of`
+- `activates`
+- `executed-by`
+- `produces`
+- `derived-from`
+- `references`
+- `discusses`
+- `requests`
+- `reviews`
+- `revises`
+- `canonicalizes`
+- `projects`
+- `belongs-to`
+
+## Current implementation priority
+
+1. Introduce the shared recursive object/context envelope.
+2. Refactor Ask into a universal conversation browser/runtime.
+3. Add PM conversation reads and native Discourse Chat adapters using delegated authority.
+4. Represent CORE definitions and activations correctly; stop treating the Cores category as the semantic object.
+5. Move personal data into global identity/Mine projections rather than a duplicate chat/product surface.
+6. Refactor Explore around object families + facets, retaining origin/authority/provenance on every row.
+7. Make Research accept any normalized object as its source context.
+8. Continue n8n guarded execution and real Deploy Research after the interaction model is coherent.
+
+## UI invariants
+
+- Ask / Research / Explore are first-class.
+- Top-level navigation uses verbs/modes, never implementation systems.
+- Origin is always visible but not cognitively dominant.
+- Progressive disclosure over dashboards.
+- The front page remains sparse.
+- Knowledge Graph is secondary Explore navigation.
+- No command palette.
+- No fake controls.
+- No developer/configuration metalanguage on public surfaces.
+- Gamification may use real Discourse badges/gamification/activity state, but never invented decorative XP detached from authoritative behavior.
