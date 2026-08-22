@@ -26,7 +26,7 @@ async function wiki(params: Record<string, string>) {
   return data;
 }
 
-function namespaceId(namespaces: unknown, target: string) {
+function namespaceId(namespaces: unknown, target: string): number | null {
   const expected = target.toLowerCase();
   const entries = Array.isArray(namespaces)
     ? namespaces.map((namespace, index) => [String(namespace?.id ?? index), namespace] as const)
@@ -88,25 +88,26 @@ export async function GET(request: NextRequest) {
     const site = await wiki({ action: 'query', meta: 'siteinfo', siprop: 'namespaces' });
     const namespaces = site?.query?.namespaces || {};
     const targetNamespace = namespaceId(namespaces, definitions[kind].namespace);
-    if (!Number.isInteger(targetNamespace)) {
+    if (targetNamespace === null || !Number.isInteger(targetNamespace)) {
       return NextResponse.json({ kind, available: false, namespace: definitions[kind].namespace, resources: [] });
     }
+    const resolvedNamespace: number = targetNamespace;
 
     const data = await wiki({
       action: 'query',
       list: 'allpages',
-      apnamespace: String(targetNamespace),
+      apnamespace: String(resolvedNamespace),
       aplimit: '100',
       apfilterredir: 'nonredirects',
     });
     const pages = Array.isArray(data?.query?.allpages) ? data.query.allpages : [];
-    const resources = pages.map((page: any) => pageResource(page, kind, targetNamespace));
+    const resources = pages.map((page: any) => pageResource(page, kind, resolvedNamespace));
 
     return NextResponse.json({
       kind,
       available: true,
       namespace: definitions[kind].namespace,
-      namespaceId: targetNamespace,
+      namespaceId: resolvedNamespace,
       count: resources.length,
       resources,
       continuation: data?.continue || null,
