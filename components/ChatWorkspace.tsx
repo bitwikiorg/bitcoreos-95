@@ -15,7 +15,7 @@ type ConversationIndex = {
   scopes?: string[];
   conversations: ConversationSummary[];
 };
-type Filter = 'all' | 'local' | 'messages' | 'chat';
+type Filter = 'all' | 'local' | 'pm' | 'chat' | 'runs';
 
 const emptyConversation = (): Conversation => ({
   id: `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -37,9 +37,16 @@ function kindLabel(kind: ConversationKind) {
 }
 
 function bucket(kind: ConversationKind): Filter {
-  if (kind === 'pm' || kind === 'construct') return 'messages';
+  if (kind === 'pm' || kind === 'construct') return 'pm';
   if (kind.startsWith('chat-')) return 'chat';
+  if (kind === 'core-run' || kind === 'node-run' || kind === 'mas') return 'runs';
   return 'all';
+}
+
+function filterLabel(value: Filter) {
+  if (value === 'pm') return 'PM + Bots';
+  if (value === 'runs') return 'Runs';
+  return value[0].toUpperCase() + value.slice(1);
 }
 
 function compactTime(value?: string) {
@@ -208,7 +215,7 @@ export function ChatWorkspace() {
   function researchRemote() {
     if (!activeRemote) return;
     sessionStorage.setItem('bitcoreos-context-object', JSON.stringify(activeRemote.context));
-    sessionStorage.setItem('bitcoreos-research-seed', `Research and distill this conversation: ${activeRemote.title}`);
+    sessionStorage.setItem('bitcoreos-research-seed', `Research and distill this ${activeRemote.context.kind}: ${activeRemote.title}`);
     router.push('/research');
   }
 
@@ -219,8 +226,8 @@ export function ChatWorkspace() {
       <aside className="chat-sidebar win-panel raised">
         <div className="panel-heading"><div>ASK HISTORY</div><button onClick={newChat}>+ New</button></div>
         <div className="conversation-filters" aria-label="Conversation filters">
-          {(['all', 'local', 'messages', 'chat'] as Filter[]).map((value) => (
-            <button key={value} data-active={filter === value} onClick={() => setFilter(value)}>{value === 'messages' ? 'PM' : value[0].toUpperCase() + value.slice(1)}</button>
+          {(['all', 'local', 'pm', 'chat', 'runs'] as Filter[]).map((value) => (
+            <button key={value} data-active={filter === value} onClick={() => setFilter(value)}>{filterLabel(value)}</button>
           ))}
         </div>
         <div className="conversation-list sunken unified-conversation-list">
@@ -243,9 +250,9 @@ export function ChatWorkspace() {
           {!visibleLocal.length && !visibleRemote.length && <div className="conversation-empty">No conversations in this view.</div>}
         </div>
         <div className="chat-sidebar-note conversation-access">
-          {!remoteIndex.viewer && <><span>Local Ask is ready.</span><a href="/api/auth/login">Sign in to add your conversations</a></>}
-          {remoteIndex.viewer && !remoteIndex.delegated && <><span>@{remoteIndex.viewer}</span><a href="/api/auth/user-key/start?return=/ask">Connect conversations</a></>}
-          {remoteIndex.viewer && remoteIndex.delegated && <><span>@{remoteIndex.viewer}</span><b>Synced</b></>}
+          {!remoteIndex.viewer && <><span>Local Ask + public runs are ready.</span><a href="/api/auth/login">Sign in for private conversations</a></>}
+          {remoteIndex.viewer && !remoteIndex.delegated && <><span>@{remoteIndex.viewer}</span><a href="/api/auth/user-key/start?return=/ask">Add private conversations</a></>}
+          {remoteIndex.viewer && remoteIndex.delegated && <><span>@{remoteIndex.viewer}</span><b>Private state connected</b></>}
         </div>
       </aside>
 
@@ -257,13 +264,13 @@ export function ChatWorkspace() {
         <div className="message-stream sunken">
           {!activeRemote && active.messages.length === 0 && (
             <div className="chat-empty">
-              <div className="mini-title">START A CONVERSATION</div>
-              <h2>Ask, continue a conversation, or bring an object into context.</h2>
-              <p>Local Ask can reason across the ecosystem. Signed-in conversations from PMs, Constructs, and native Chat appear in the same history without losing their source identity.</p>
+              <div className="mini-title">START OR CONTINUE</div>
+              <h2>Ask, open a conversation, or bring any object into context.</h2>
+              <p>Local Ask, public CORE runs, PM-backed Constructs, private messages, and native Chat share one interaction surface while keeping their actual identity, visibility, transport, and provenance.</p>
               <div className="prompt-chips">
-                <button onClick={() => setInput('How do BIThub and BITwiki relate?')}>Map the ecosystem</button>
+                <button onClick={() => setInput('Map the relationships between current discussions, agents, and durable knowledge.')}>Map the ecosystem</button>
                 <button onClick={() => setInput('What knowledge should we research next?')}>Find knowledge gaps</button>
-                <button onClick={() => setInput('Show me how a discussion becomes durable knowledge.')}>Trace provenance</button>
+                <button onClick={() => setInput('Show me how current work can become reusable durable knowledge.')}>Trace provenance</button>
               </div>
             </div>
           )}
@@ -295,7 +302,7 @@ export function ChatWorkspace() {
           </form>
         ) : (
           <div className="remote-conversation-actions">
-            <span>{activeRemote.context.authority.visibility === 'private' ? 'Private conversation' : 'Conversation'} · source preserved</span>
+            <span>{activeRemote.context.kind} · {activeRemote.context.authority.visibility} · source preserved</span>
             <div>
               <button onClick={researchRemote}>Research this</button>
               {activeRemote.url && <a href={activeRemote.url} target="_blank" rel="noreferrer">Open source ↗</a>}
@@ -315,7 +322,7 @@ export function ChatWorkspace() {
                 return (
                   <a href={resource.url} target="_blank" rel="noreferrer" key={resource.id} className="evidence-card">
                     <span className={`source-chip ${resource.source}`}>{label}</span>
-                    <div><strong>{resource.title}</strong><small>{resource.kind}</small><p>{resource.excerpt || 'Source match'}</p></div>
+                    <div><strong>{resource.title}</strong><small>{resource.context?.kind || resource.kind}</small><p>{resource.excerpt || 'Source match'}</p></div>
                   </a>
                 );
               })}
