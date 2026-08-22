@@ -6,10 +6,10 @@ import type { HydratedResource, Resource, SearchResponse } from '@/lib/resources
 import { contextLabel, publicHubTopicContext, publicWikiPageContext } from '@/lib/context';
 import { SemanticFacts, type SemanticFact } from './SemanticFacts';
 
-type Mode = 'feed' | 'search' | 'spaces' | 'agents' | 'mine';
+type Mode = 'feed' | 'search' | 'spaces' | 'actors' | 'mine';
 type HubOverview = { latest?: any[]; categories?: any[] };
 type WikiOverview = { recent?: any[]; categories?: any[] };
-type AgentData = { registryUrl?: string; agents?: Array<{ index: number; name: string; username?: string; registryIdentity: string; intent: string; family: string }> };
+type ActorData = { registryUrl?: string; resources?: Resource[] };
 type SpaceState = null | { id: number; slug: string; label: string; name: string; description?: string; url?: string };
 type MineState = { viewer: string | null; delegated: boolean; resources: Resource[]; loading: boolean; error?: string };
 
@@ -47,7 +47,7 @@ export function Explorer() {
   const [data, setData] = useState<SearchResponse | null>(null);
   const [hub, setHub] = useState<HubOverview>({});
   const [wiki, setWiki] = useState<WikiOverview>({});
-  const [agents, setAgents] = useState<AgentData>({});
+  const [actors, setActors] = useState<ActorData>({});
   const [mine, setMine] = useState<MineState>({ viewer: null, delegated: false, resources: [], loading: false });
   const [selected, setSelected] = useState<Resource | null>(null);
   const [detail, setDetail] = useState<HydratedResource | null>(null);
@@ -70,7 +70,7 @@ export function Explorer() {
     void Promise.all([
       fetch('/api/hub/overview').then((r) => r.json()).then(setHub).catch(() => setHub({})),
       fetch('/api/wiki/overview').then((r) => r.json()).then(setWiki).catch(() => setWiki({})),
-      fetch('/api/agents').then((r) => r.json()).then(setAgents).catch(() => setAgents({})),
+      fetch('/api/agents').then((r) => r.json()).then(setActors).catch(() => setActors({})),
     ]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -218,7 +218,7 @@ export function Explorer() {
           <button data-active={mode === 'feed'} onClick={() => { setMode('feed'); setSelected(null); }}>Feed</button>
           <button data-active={mode === 'search'} onClick={() => setMode('search')}>Search</button>
           <button data-active={mode === 'spaces'} onClick={() => { setMode('spaces'); setSelected(null); }}>Spaces</button>
-          <button data-active={mode === 'agents'} onClick={() => { setMode('agents'); setSelected(null); }}>Agents</button>
+          <button data-active={mode === 'actors'} onClick={() => { setMode('actors'); setSelected(null); }}>Actors</button>
           <button data-active={mode === 'mine'} onClick={() => void openMine()}>Mine</button>
           <button className="secondary-mode" onClick={() => router.push('/ontology')}>Graph ↗</button>
         </div>
@@ -295,19 +295,17 @@ export function Explorer() {
           </div>
         )}
 
-        {mode === 'agents' && (
-          <div className="agent-directory sunken">
-            <div className="explorer-empty agent-intro"><b>Agent registry</b><span>Public Constructs from the same registry used by the B8 agent layer.</span></div>
-            {(agents.agents || []).map((agent) => {
-              const href = agent.username ? `https://hub.bitwiki.org/u/${encodeURIComponent(agent.username)}` : (agents.registryUrl || 'https://hub.bitwiki.org/t/30145');
-              return (
-                <a key={agent.index} href={href} target="_blank" rel="noreferrer" className="agent-row">
-                  <span className="agent-index">{String(agent.index).padStart(2, '0')}</span>
-                  <div><strong>{agent.name}</strong><p>{agent.intent}</p></div>
-                  <small>{agent.username ? `@${agent.username}` : agent.family}</small>
-                </a>
-              );
-            })}
+        {mode === 'actors' && (
+          <div className="actor-directory sunken">
+            <div className="explorer-empty agent-intro"><b>Actor registry</b><span>Construct accounts, MAS actors, philosophical personas, and provider-backed actors remain distinct object types.</span></div>
+            {(actors.resources || []).map((resource) => (
+              <button key={resource.id} className="resource-row relaxed-row actor-resource-row" data-selected={selected?.id === resource.id} onClick={() => setSelected(resource)}>
+                <span className="actor-kind-chip">{resource.kind.toUpperCase()}</span>
+                <div><strong>{resource.title}</strong><p>{resource.excerpt || resource.context?.kind || resource.kind}</p></div>
+                <small>{String(resource.metadata?.registryIdentity || '')}</small>
+              </button>
+            ))}
+            {!(actors.resources || []).length && <div className="quiet-empty">Actor registry unavailable.</div>}
           </div>
         )}
 
@@ -334,13 +332,13 @@ export function Explorer() {
               <button onClick={() => useResource('research')}>Research</button>
             </div>
             {selected.context && (
-              <details className="reader-object-context">
+              <details className="reader-object-context" open={mode === 'actors'}>
                 <summary>{contextLabel(selected.context)}</summary>
                 <ObjectContextRow label="Origin" value={selected.context.origin.plane} />
                 <ObjectContextRow label="Substrate" value={selected.context.origin.substrate} />
                 <ObjectContextRow label="Visibility" value={selected.context.authority.visibility} />
                 {selected.context.identity?.author && <ObjectContextRow label="Author" value={`@${selected.context.identity.author}`} />}
-                {selected.context.identity?.executor?.label && <ObjectContextRow label="Executor" value={selected.context.identity.executor.label} />}
+                {selected.context.identity?.executor?.label && <ObjectContextRow label="Identity" value={`${selected.context.identity.executor.label} · ${selected.context.identity.executor.kind}`} />}
                 <div className="context-capabilities">{selected.context.capabilities.map((capability) => <span key={capability}>{capability}</span>)}</div>
                 {selected.context.provenance?.map((relation, index) => <div className="context-relation" key={`${relation.relation}-${index}`}>{relation.relation} → {relation.label || relation.targetId}</div>)}
               </details>
