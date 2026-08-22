@@ -8,22 +8,32 @@ import {
   type SessionUser,
 } from '@/lib/session';
 
+function publicOrigin(request: NextRequest) {
+  if (process.env.BITCOREOS_PUBLIC_URL) return process.env.BITCOREOS_PUBLIC_URL.replace(/\/$/, '');
+  if (process.env.VERCEL_ENV === 'production') return 'https://bitcoreos-95.vercel.app';
+  return request.nextUrl.origin;
+}
+
+function fail(request: NextRequest, code: string) {
+  return NextResponse.redirect(new URL(`/my?auth=${encodeURIComponent(code)}`, publicOrigin(request)));
+}
+
 export async function GET(request: NextRequest) {
   const sso = request.nextUrl.searchParams.get('sso');
   const sig = request.nextUrl.searchParams.get('sig');
-  if (!sso || !sig) return NextResponse.json({ error: 'missing_sso_payload' }, { status: 400 });
+  if (!sso || !sig) return fail(request, 'incomplete');
 
   try {
     const expected = discourseSignature(sso);
-    if (!secureEqualHex(expected, sig)) return NextResponse.json({ error: 'invalid_sso_signature' }, { status: 400 });
+    if (!secureEqualHex(expected, sig)) return fail(request, 'invalid');
 
     const decoded = Buffer.from(sso, 'base64').toString('utf8');
     const params = new URLSearchParams(decoded);
     const nonce = request.cookies.get(SSO_NONCE_COOKIE)?.value;
-    if (!nonce || params.get('nonce') !== nonce) return NextResponse.json({ error: 'invalid_sso_nonce' }, { status: 400 });
+    if (!nonce || params.get('nonce') !== nonce) return fail(request, 'expired');
 
     const username = params.get('username');
-    if (!username) return NextResponse.json({ error: 'missing_username' }, { status: 400 });
+    if (!username) return fail(request, 'invalid');
 
     const user: SessionUser = {
       externalId: params.get('external_id') ?? undefined,
@@ -34,17 +44,17 @@ export async function GET(request: NextRequest) {
       groups: (params.get('groups') ?? '').split(',').map((group) => group.trim()).filter(Boolean),
     };
 
-    const response = NextResponse.redirect(new URL('/', request.nextUrl.origin));
+    const response = NextResponse.redirect(new URL('/my', publicOrigin(request)));
     response.cookies.set(SESSION_COOKIE, signSession(user), {
       httpOnly: true,
       sameSite: 'lax',
-      secure: request.nextUrl.protocol === 'https:',
+      secure: true,
       path: '/',
       maxAge: 7 * 24 * 60 * 60,
     });
     response.cookies.delete(SSO_NONCE_COOKIE);
     return response;
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'sso_callback_failed' }, { status: 500 });
+  } catch {
+    return fail(request, 'failed');
   }
 }
