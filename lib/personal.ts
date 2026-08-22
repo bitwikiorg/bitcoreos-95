@@ -37,6 +37,30 @@ async function userActions(username: string, filter: 4 | 5, limit = 20) {
   return (Array.isArray(data?.user_actions) ? data.user_actions : []).slice(0, limit).map((item: any) => normalizeAction(item, filter === 4 ? 'topic' : 'post'));
 }
 
+async function userBadges(username: string) {
+  const url = new URL(`/user-badges/${encodeURIComponent(username)}.json`, HUB);
+  url.searchParams.set('grouped', 'true');
+  const data = await json(url, { next: { revalidate: 120 } } as RequestInit);
+  const definitions = new Map((Array.isArray(data?.badges) ? data.badges : []).map((badge: any) => [Number(badge.id), badge]));
+  const types = new Map((Array.isArray(data?.badge_types) ? data.badge_types : []).map((type: any) => [Number(type.id), type]));
+  const grants = Array.isArray(data?.user_badges) ? data.user_badges : [];
+
+  return grants.map((grant: any) => {
+    const definition: any = definitions.get(Number(grant.badge_id)) || {};
+    const type: any = types.get(Number(definition.badge_type_id)) || {};
+    return {
+      id: Number(grant.id || 0),
+      badgeId: Number(grant.badge_id || 0),
+      name: String(definition.name || 'Badge'),
+      description: stripHtml(String(definition.description || definition.long_description || '')),
+      type: String(type.name || '').toLowerCase() || undefined,
+      grantedAt: grant.granted_at,
+      favorite: Boolean(grant.is_favorite),
+      count: Number(grant.count || 1),
+    };
+  }).filter((badge: any) => badge.badgeId > 0);
+}
+
 async function wikiUser(username: string) {
   const url = new URL('/w/api.php', WIKI);
   url.searchParams.set('action', 'query');
@@ -88,10 +112,11 @@ async function delegatedTopicSet(credential: DelegatedCredential, filter: 'bookm
 }
 
 export async function getPersonalOverview(username: string, delegated?: DelegatedCredential | null) {
-  const [profileResult, topicsResult, postsResult, wikiResult, notificationsResult, bookmarksResult, trackingResult, watchingResult] = await Promise.allSettled([
+  const [profileResult, topicsResult, postsResult, badgesResult, wikiResult, notificationsResult, bookmarksResult, trackingResult, watchingResult] = await Promise.allSettled([
     json(new URL(`/u/${encodeURIComponent(username)}.json`, HUB), { next: { revalidate: 45 } } as RequestInit),
     userActions(username, 4),
     userActions(username, 5),
+    userBadges(username),
     wikiUser(username),
     delegated ? discourseAsUser('/notifications.json?limit=20', delegated) : Promise.resolve(null),
     delegated ? delegatedTopicSet(delegated, 'bookmarks') : Promise.resolve([]),
@@ -102,6 +127,7 @@ export async function getPersonalOverview(username: string, delegated?: Delegate
   const profile = profileResult.status === 'fulfilled' ? profileResult.value?.user || {} : {};
   const topics = topicsResult.status === 'fulfilled' ? topicsResult.value : [];
   const posts = postsResult.status === 'fulfilled' ? postsResult.value : [];
+  const badges = badgesResult.status === 'fulfilled' ? badgesResult.value : [];
   const wiki = wikiResult.status === 'fulfilled' ? wikiResult.value : { namespace: { exists: false, title: `User:${username}`, url: `${WIKI}/User:${encodeURIComponent(username)}` }, contributions: [] };
   const notifications = notificationsResult.status === 'fulfilled' && Array.isArray(notificationsResult.value?.notifications)
     ? notificationsResult.value.notifications.slice(0, 20).map((item: any) => ({ id: item.id, type: item.notification_type, read: Boolean(item.read), createdAt: item.created_at, data: item.data || {} }))
@@ -122,7 +148,7 @@ export async function getPersonalOverview(username: string, delegated?: Delegate
       likesGiven: Number(profile?.likes_given ?? profile?.user_stat?.likes_given ?? 0),
       daysVisited: Number(profile?.days_visited ?? profile?.user_stat?.days_visited ?? 0),
     },
-    hub: { topics, posts },
+    hub: { topics, posts, badges },
     wiki,
     delegated: {
       connected: Boolean(delegated),
