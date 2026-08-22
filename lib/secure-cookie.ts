@@ -1,9 +1,8 @@
 import crypto from 'crypto';
+import { localEncryptionSecret } from './session';
 
 function key() {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) throw new Error('SESSION_SECRET is not configured');
-  return crypto.createHash('sha256').update(secret).digest();
+  return crypto.createHash('sha256').update(localEncryptionSecret()).digest();
 }
 
 export function seal(value: unknown) {
