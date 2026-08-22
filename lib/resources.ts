@@ -8,6 +8,8 @@ export type ResourceKind =
   | 'guide'
   | 'category'
   | 'user'
+  | 'group'
+  | 'tag'
   | 'wiki-page'
   | 'revision'
   | 'template'
