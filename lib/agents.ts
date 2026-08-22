@@ -67,7 +67,7 @@ function actorResource(agent: B8Agent, registryTopicId: number, registryUrl: str
       url,
     },
     identity: {
-      executor: {
+      subject: {
         kind: semantics.actorKind,
         id: agent.username ? `discourse-user:${agent.username}` : `b8:actor:${agent.index}`,
         label: agent.name,
@@ -95,7 +95,6 @@ function actorResource(agent: B8Agent, registryTopicId: number, registryUrl: str
     title: agent.name,
     excerpt: agent.intent,
     url,
-    author: agent.username,
     metadata: {
       registryIndex: agent.index,
       registryIdentity: normalizedIdentity,
