@@ -25,11 +25,21 @@ function discourseConnectSecret() {
     || '';
 }
 
+function rootLocalSecret() {
+  return process.env.SESSION_SECRET || discourseConnectSecret();
+}
+
 function sessionSecret() {
   if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
   const root = discourseConnectSecret();
   if (!root) throw new Error('authentication secret is unavailable');
   return crypto.createHmac('sha256', root).update('bitcoreos-95/session/v1').digest('hex');
+}
+
+export function localEncryptionSecret() {
+  const root = rootLocalSecret();
+  if (!root) throw new Error('authentication secret is unavailable');
+  return crypto.createHmac('sha256', root).update('bitcoreos-95/local-encryption/v1').digest('hex');
 }
 
 function base64url(value: Buffer | string) {
