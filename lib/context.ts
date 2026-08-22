@@ -8,15 +8,18 @@ export type ObjectAuthority = {
 
 export type ActorKind = 'human' | 'construct' | 'core' | 'node' | 'agent' | 'mas' | 'persona' | 'provider' | 'model' | 'system' | 'unknown';
 
+export type ActorRef = {
+  kind: ActorKind;
+  id?: string;
+  label?: string;
+};
+
 export type ObjectIdentity = {
   viewer?: string;
+  subject?: ActorRef;
   author?: string;
   participants?: string[];
-  executor?: {
-    kind: ActorKind;
-    id?: string;
-    label?: string;
-  };
+  executor?: ActorRef;
 };
 
 export type ProvenanceRelation = {
@@ -106,7 +109,7 @@ export function publicWikiPageContext(input: {
 }
 
 export function contextLabel(context: ContextCapsule) {
-  const executor = context.identity?.executor?.label;
-  const parts = [executor, context.kind, context.origin.substrate, context.authority.visibility].filter(Boolean);
+  const identity = context.identity?.subject?.label || context.identity?.executor?.label;
+  const parts = [identity, context.kind, context.origin.substrate, context.authority.visibility].filter(Boolean);
   return parts.join(' · ');
 }
