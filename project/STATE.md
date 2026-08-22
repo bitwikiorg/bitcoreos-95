@@ -6,145 +6,182 @@ Branch policy: active development occurs on `main`; archival branches are rollba
 
 ## Product role
 
-BITCOREOS-95 is the low-friction navigation, research, and interaction client across BIThub and BITwiki.
+BITCOREOS-95 is the unified user-facing projection of BIThub + BITwiki.
 
-It is not a new authority for Hub or Wiki data.
+The UI should not present BITCOREOS, BIThub, and BITwiki as competing products. Source systems remain authoritative, but they appear as object origin/authority/provenance inside the same interaction shell.
 
-- BIThub / Discourse owns live work, discussion, users, messages, agent-facing work trails, categories, and interaction state.
-- BITwiki / MediaWiki owns durable knowledge. Semantic MediaWiki owns semantic assertions; Cargo owns bounded operational records when deployed; the `wiki-content` repository owns source-controlled canonical wiki content.
-- n8n is the privileged action and policy boundary for sensitive writes, multi-system transactions, guarded execution, retries, secrets, and jailbreak/prompt-injection-sensitive workflows.
-- `bitwikiorg/agent.b8-plugin` is the canonical agent-facing BIThub capability family.
-- BITCOREOS-95 owns retrieval, normalization, navigation, user-facing projections, session state, research UX, provenance display, and action routing.
-
-## Authority model
-
-### Public reads
-Direct native APIs where possible:
-
-- Discourse public APIs for BIThub.
-- MediaWiki REST / Action API, then SMW/Cargo query surfaces where appropriate, for BITwiki.
-
-Do not route harmless public reads through n8n merely for uniformity.
-
-### Identity
-DiscourseConnect SSO answers: **who is the user?**
-
-BITCOREOS-95 maintains a signed local session projection of the verified BIThub identity; Discourse remains the identity authority.
-
-### Delegated BIThub authority
-A Discourse User API Key answers: **what may BITCOREOS-95 read or do as this user?**
-
-Identity and delegated API authority remain separate concerns.
-
-### Mutations / privileged execution
-Sensitive writes and multi-system actions route through n8n by default.
-
-Canonical action flow:
-
-`guard -> execute -> verify`
-
-Actions carry correlation and idempotency identifiers so UI, n8n, BIThub, agents, and BITwiki work can be reconciled without duplicate execution.
-
-## Primary product surfaces
-
-Primary work surfaces:
+Primary verbs:
 
 - Ask
 - Research
 - Explore
 
-Secondary/contextual surfaces:
+Global/contextual projections:
 
-- My BIThub personal workspace
+- current identity / authority
+- Mine filters
 - Knowledge Graph inside Explore
 - Kordylewski Relay guide
 
-The sparse lander remains an orientation surface rather than a dashboard.
+The current `/my` implementation is transitional. Personal state remains useful, but the canonical direction is to distribute it through global identity/Mine projections rather than let `/my` become a second chat/research/explore product.
+
+## Recursive object invariant
+
+Every normalized object should carry:
+
+- kind
+- origin
+- substrate
+- actor/participants
+- viewer identity
+- authority/visibility
+- source ID/URL
+- parent/derived/provenance relations
+- state
+- allowed capabilities
+
+This applies equally to Hub topics/posts/PMs/Chat, CORE activations, agents, Wiki pages/SMW facts, Cargo requests, artifacts, n8n jobs, and local MAS sessions.
+
+## Conversation model correction
+
+Ask is the canonical conversation mode.
+
+Conversation substrates to converge under Ask:
+
+- local grounded Ask conversation
+- Discourse private-message topic
+- native Discourse Chat channel
+- native Discourse Chat direct-message channel
+- native Discourse Chat thread
+- CORE activation topic/reply trail
+- Construct/bot conversation over PM/Chat/topic
+- Node interaction
+- local MAS session
+- selected workflow execution/status projection
+
+A conversation must expose its source and semantics instead of flattening them away.
+
+### CORE correction
+
+COREs are workflow/cognition activators, not merely content spaces.
+
+The current Explore `Cores` category stream is useful as a discovery/catalog projection, but it must not define CORE semantics. A CORE definition, an activation topic, its replies, executor identity, and produced artifacts are distinct linked objects.
 
 ## Current implemented functionality
 
-### Public navigation and retrieval
+### Public retrieval
 
-- Federated BIThub + BITwiki search.
-- Hydrated internal source readers for BIThub topics and BITwiki pages.
-- Ask grounded in bounded hydrated Hub/Wiki source content.
-- Explore feed, search, agents, and curated BIThub Spaces.
-- Native Discourse category streams for Discussions/Community, Nodes, Cores, Markets/Marketplace, Artifacts, Workspaces, Feeds, and BITCOREOS.
-- Public B8 agent registry projection using the canonical BIThub registry topic.
-- Common source normalization, including encoded punctuation cleanup.
+- federated BIThub + BITwiki search
+- hydrated BIThub topic/post reader
+- hydrated BITwiki page reader
+- Ask grounded in bounded Hub/Wiki evidence
+- Explore Feed/Search/Spaces/Agents
+- native Discourse category stream adapter
+- public B8 registry projection
+- source text normalization
 
-### BITwiki semantic/research reads
+### BITwiki semantics/research
 
-- MediaWiki page hydration with rendered-page fallback.
-- SMW runtime diagnostics and per-subject semantic fact traversal.
-- Knowledge Graph layer map plus optional real SMW subject relations.
-- Research intent taxonomy: new page, revision, category/navigation, semantic model, Lua/computed projection, reusable artifact, coverage audit.
-- Existing-page/request preflight.
-- Current target SMW facts can be included in research preflight.
-- Requested Knowledge reads prefer live Cargo but fall back to canonical `wiki-content` when live Cargo is unavailable.
+- MediaWiki page hydration with rendered fallback
+- SMW runtime diagnostics
+- per-subject SMW fact traversal
+- secondary Knowledge Graph
+- research intent taxonomy: new page, revision, category/navigation, semantic model, Lua projection, reusable artifact, coverage audit
+- existing-page/request preflight
+- Cargo-first Requested Knowledge reader with explicit `wiki-content` fallback while live Cargo is unhealthy
 
-Current live limitation: Cargo `Knowledge_requests` throws a MediaWiki runtime exception, so Research currently reports and uses the source-controlled fallback rather than pretending Cargo is healthy.
+### Identity and personal state
 
-### Identity and personal workspace
+Application support exists for:
 
-Production auth currently reports `configured: true` using `DISCOURSE_SSO_SECRET`.
+- Anonymous state
+- DiscourseConnect SSO session
+- scoped Discourse User API Key handshake using RSA/OAEP
+- encrypted delegated credential storage
+- notifications
+- bookmarks/tracking/watching
+- public contribution trail
+- provisional same-username BITwiki User: namespace/contribution projection
 
-Verified production behavior:
+Production `/api/auth/login` generates the correct BIThub DiscourseConnect request and callback host. The provider domain was corrected by the operator to `bitcoreos-95.vercel.app` without protocol. A real successful browser callback still needs verification after that provider-side fix.
 
-- anonymous `/api/auth/me` returns `user: null, configured: true`;
-- `/api/auth/login` issues a real redirect to BIThub `/session/sso_provider`;
-- production return URL is `https://bitcoreos-95.vercel.app/api/auth/callback`;
-- anonymous UI explicitly presents the user as Anonymous / public read mode;
-- shell and personal workspace expose Sign in with BIThub actions.
+### Agents/actions
 
-The full callback cannot be verified without completing a real BIThub browser login; that remains the next identity verification step.
+- public B8 registry reader
+- canonical B8 capability vocabulary
+- typed BITCOREOS -> n8n action envelope
+- correlation and idempotency IDs
+- HMAC signing
+- server-side risk classification and allowlist
 
-My BIThub currently supports:
+n8n execution is not live until its production endpoint/secret are connected.
 
-- anonymous guest projection;
-- public contribution trail for a signed-in BIThub identity;
-- contribution metrics and contribution-mix visualization based on real retrieved data;
-- provisional same-username BITwiki User: namespace and contribution projection;
-- scoped Discourse User API Key handshake using RSA/OAEP;
-- encrypted HttpOnly delegated credential storage;
-- notifications;
-- bookmarks, tracked topics, and watched topics projected into Saved + inbox;
-- disconnect/revoke path.
+## Discourse capability surface confirmed from upstream references
 
-The delegated User API approval/callback still needs a real signed-in user round-trip verification.
+Classic Discourse APIs expose or model:
 
-### Agent/action boundary
+- topics
+- posts/replies
+- private messages
+- users
+- groups
+- categories
+- tags
+- search
+- notifications
+- user actions/activity
+- badges
+- polls
+- uploads
+- invites
+- topic bookmarks and notification levels
 
-- Public B8 registry reader parses the live registry and canonical capability vocabulary.
-- Registry identities that are not real Discourse users are not linked as fake user profiles.
-- Typed guarded BITCOREOS -> n8n action envelope exists with HMAC signing, correlation ID, idempotency key, risk class, source context, and allowlisted action vocabulary.
+Native Discourse Chat additionally exposes:
 
-The n8n broker is code-complete but not live until its production endpoint/secret are configured.
+- channels
+- current-user channels
+- direct-message channels
+- messages
+- threads
+- drafts
+- pins
+- memberships
+- reactions/interactions
+- search
+- read state
+- notification settings
+- invites
+- archives
+- incoming webhooks
+- edit/delete/restore/move operations
 
-## Live observed system state
+The Discourse Ask theme itself uses a private message to an AI bot as its question/conversation mechanism. This reinforces Ask-as-conversation rather than a separate personal chat surface.
 
-BIThub public API currently exposes real category/topic streams, including Nodes and Cores.
+The separate Chat Integration plugin is an external-chat bridge and is not the same thing as native Discourse Chat.
 
-BITwiki SMW runtime currently reports substantial semantic usage but an underdeclared schema surface: thousands of property values/uses, hundreds of semantic queries, few declared Property pages, and no live Concepts returned by the current directory browse. Per-subject SMW relations do work and should be treated as the reliable semantic navigation primitive for now.
+## Current limitations / gates
 
-## Current external/infrastructure dependencies
-
-- Complete one real DiscourseConnect login/callback round trip.
-- Complete one real Discourse User API Key approval/callback round trip.
-- Configure `N8N_ACTION_URL` and `N8N_ACTION_SECRET` before guarded actions can execute.
-- Repair/deploy live Cargo `Knowledge_requests` if Cargo is to become runtime request-state authority.
-- Decide and configure the future BIThub ↔ BITwiki verified identity bridge before treating same-username MediaWiki User: data as authenticated ownership.
+- Verify one successful DiscourseConnect callback after provider-domain correction.
+- Verify one User API Key approval/callback.
+- Determine which native Chat routes are enabled and usable on BIThub with delegated user authority.
+- Add PM + Chat normalized adapters.
+- Refactor current `/my` personal workspace into identity/Mine projections.
+- Refactor CORE representation away from category-as-object semantics.
+- Connect `N8N_ACTION_URL` and `N8N_ACTION_SECRET`.
+- Repair/deploy live Cargo `Knowledge_requests` if Cargo is to own runtime request state.
+- Establish verified BIThub ↔ BITwiki identity before treating MediaWiki User: namespace matches as authenticated ownership.
 
 ## UI invariants
 
-- Win95/BITCOREOS-95 styling exists to reduce cognitive load, not simulate an operating system for its own sake.
-- Ask, Research, and Explore are first-class.
-- The front page stays a sparse lander.
-- Complex dashboards belong only where they serve a task, especially My BIThub.
-- Progressive disclosure is preferred over always-visible panes.
-- Knowledge Graph is secondary navigation, not a first-class homepage function.
+- Ask / Research / Explore are first-class verbs.
+- Identity is global context, not a competing app.
+- Mine is a filter/projection.
+- Origin/authority/provenance are visible on every object.
+- One underlying object may appear in multiple modes without duplication of authoritative state.
+- Front page remains sparse.
+- Progressive disclosure over dashboards.
+- Knowledge Graph stays secondary to Explore.
 - No command palette.
-- No fake minimize/maximize/close controls.
-- No decorative controls without behavior.
-- No developer/configuration metalanguage on public user surfaces.
-- The ophanim / engineering-codex motif is a restrained recurring interface mark, not content lore.
+- No fake controls.
+- No developer/configuration metalanguage on public surfaces.
+- Real badges/activity/gamification signals are acceptable; invented decorative XP is not.
