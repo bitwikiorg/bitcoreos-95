@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
 type AuthState = { user: null | { username: string; name?: string; avatarUrl?: string }; configured: boolean };
+type BadgeSignal = { id: number; badgeId: number; name: string; description?: string; type?: string; grantedAt?: string; favorite?: boolean; count?: number };
 type Personal = {
   username: string;
   profile: { name?: string; avatarTemplate?: string; trustLevel: number; topicCount: number; postCount: number; likesReceived: number; likesGiven: number; daysVisited: number };
-  hub: { topics: any[]; posts: any[] };
+  hub: { topics: any[]; posts: any[]; badges: BadgeSignal[] };
   wiki: { namespace: { exists: boolean; title: string; url: string }; contributions: any[] };
   delegated: { connected: boolean; scopes: string[]; notifications: any[]; saved: any[] };
 };
@@ -94,6 +95,8 @@ export function PersonalSpace() {
   const mix = { topics: data.hub.topics.length, replies: data.hub.posts.length, wiki: data.wiki.contributions.length };
   const mixTotal = Math.max(1, mix.topics + mix.replies + mix.wiki);
   const saved = Array.isArray(data.delegated.saved) ? data.delegated.saved : [];
+  const badges = Array.isArray(data.hub.badges) ? data.hub.badges : [];
+  const featuredBadges = [...badges].sort((a, b) => Number(Boolean(b.favorite)) - Number(Boolean(a.favorite))).slice(0, 8);
 
   return (
     <div className="personal-space">
@@ -128,6 +131,20 @@ export function PersonalSpace() {
               </div>
               <div className="mix-legend"><span>■ {mix.topics} starts</span><span>■ {mix.replies} replies</span><span>■ {mix.wiki} wiki edits</span></div>
             </div>
+
+            {!!featuredBadges.length && (
+              <details className="badge-signals">
+                <summary><b>Earned signals</b><span>{badges.length} badge{badges.length === 1 ? '' : 's'} · authoritative account state</span></summary>
+                <div className="badge-signal-grid">
+                  {featuredBadges.map((badge) => (
+                    <div className={`badge-signal ${badge.favorite ? 'favorite' : ''}`} key={`${badge.id}-${badge.badgeId}`} title={badge.description || badge.name}>
+                      <span>◆</span><div><b>{badge.name}</b><small>{badge.type || 'badge'}{badge.count && badge.count > 1 ? ` · ×${badge.count}` : ''}</small></div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+
             <div className="personal-section-head"><div><b>Recent work</b><span>Topics and replies merged by time.</span></div><a href={`https://hub.bitwiki.org/u/${encodeURIComponent(data.username)}/activity`} target="_blank" rel="noreferrer">Source activity ↗</a></div>
             <div className="trail-list">
               {activity.slice(0, 24).map((item) => <ActivityRow key={item.id} item={item} />)}
