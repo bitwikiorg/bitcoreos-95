@@ -1,4 +1,6 @@
 import { HUB, stripHtml } from './federated';
+import type { ActorKind, ContextCapsule } from './context';
+import type { Resource, ResourceKind } from './resources';
 
 export type B8Agent = {
   index: number;
@@ -27,6 +29,85 @@ function cells(row: string) {
     .filter(Boolean);
 }
 
+function actorSemantics(agent: B8Agent): { resourceKind: ResourceKind; contextKind: string; actorKind: ActorKind } {
+  if (agent.username) {
+    return {
+      resourceKind: 'construct',
+      contextKind: agent.family === 'provider' ? 'Provider-backed Construct' : 'Construct',
+      actorKind: 'construct',
+    };
+  }
+  if (agent.family === 'philosophical') {
+    return { resourceKind: 'persona', contextKind: 'Philosophical persona', actorKind: 'persona' };
+  }
+  if (agent.family === 'provider') {
+    return { resourceKind: 'agent', contextKind: 'Provider actor', actorKind: 'provider' };
+  }
+  return {
+    resourceKind: 'agent',
+    contextKind: agent.family === 'mas' ? 'MAS actor' : 'Registry actor',
+    actorKind: agent.family === 'mas' ? 'mas' : 'agent',
+  };
+}
+
+function actorResource(agent: B8Agent, registryTopicId: number, registryUrl: string): Resource {
+  const semantics = actorSemantics(agent);
+  const url = agent.username
+    ? `${HUB}/u/${encodeURIComponent(agent.username)}`
+    : registryUrl;
+  const normalizedIdentity = agent.username ? `@${agent.username}` : agent.registryIdentity;
+  const context: ContextCapsule = {
+    id: agent.username ? `construct:${agent.username}` : `registry-actor:${agent.index}`,
+    kind: semantics.contextKind,
+    origin: {
+      plane: 'hub',
+      substrate: 'B8 actor registry entry',
+      api: `/t/${registryTopicId}.json`,
+      canonicalRef: `b8:actor:${agent.index}`,
+      url,
+    },
+    identity: {
+      executor: {
+        kind: semantics.actorKind,
+        id: agent.username ? `discourse-user:${agent.username}` : `b8:actor:${agent.index}`,
+        label: agent.name,
+      },
+    },
+    authority: { visibility: 'public', mode: 'public-read' },
+    provenance: [{ relation: 'belongs-to', targetId: `discourse:topic:${registryTopicId}`, targetKind: 'Actor registry', label: 'B8 actor registry' }],
+    capabilities: agent.username
+      ? ['read', 'ask', 'research', 'open-profile']
+      : ['read', 'ask', 'research'],
+    metadata: {
+      registryIndex: agent.index,
+      registryIdentity: normalizedIdentity,
+      registryFamily: agent.family,
+      username: agent.username,
+      callableIdentityKnown: Boolean(agent.username),
+      invocationAuthority: 'not-established',
+    },
+  };
+
+  return {
+    id: `hub:actor:${agent.index}`,
+    source: 'hub',
+    kind: semantics.resourceKind,
+    title: agent.name,
+    excerpt: agent.intent,
+    url,
+    author: agent.username,
+    metadata: {
+      registryIndex: agent.index,
+      registryIdentity: normalizedIdentity,
+      family: agent.family,
+      username: agent.username,
+      registryTopicId,
+      semanticKind: semantics.contextKind,
+    },
+    context,
+  };
+}
+
 export async function getB8Agents() {
   const topicId = 30145;
   const response = await fetch(new URL(`/t/${topicId}.json`, HUB), { next: { revalidate: 120 } } as RequestInit);
@@ -51,10 +132,12 @@ export async function getB8Agents() {
     });
   }
 
+  const registryUrl = `${HUB}/t/${topic?.slug || 'registry'}/${topicId}`;
   return {
     registryTopicId: topicId,
-    registryUrl: `${HUB}/t/${topic?.slug || 'registry'}/${topicId}`,
+    registryUrl,
     agents,
+    resources: agents.map((agent) => actorResource(agent, topicId, registryUrl)),
     capabilities: B8_CAPABILITIES,
   };
 }
