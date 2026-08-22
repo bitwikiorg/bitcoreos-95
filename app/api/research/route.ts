@@ -3,17 +3,32 @@ import { federatedSearch } from '@/lib/federated';
 import { hydrateResources } from '@/lib/hydration';
 import { intentLabel, researchPreflight, type ResearchIntent } from '@/lib/research';
 import { semanticSubject } from '@/lib/semantic';
+import type { ContextCapsule } from '@/lib/context';
 
 const INTENTS: ResearchIntent[] = ['new-page', 'revise-page', 'category', 'semantic-model', 'lua-projection', 'artifact', 'coverage-audit'];
 
-function fallbackPlan(request: string, evidence: any[], intent: ResearchIntent, targetTitle?: string, semanticFactCount = 0) {
+function safeContext(value: unknown): ContextCapsule | null {
+  if (!value || typeof value !== 'object') return null;
+  try {
+    const encoded = JSON.stringify(value);
+    if (encoded.length > 12_000) return null;
+    const parsed = JSON.parse(encoded) as ContextCapsule;
+    if (!parsed?.id || !parsed?.kind || !parsed?.origin?.plane || !parsed?.origin?.substrate || !parsed?.authority?.visibility) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function fallbackPlan(request: string, evidence: any[], intent: ResearchIntent, targetTitle?: string, semanticFactCount = 0, sourceContext?: ContextCapsule | null) {
   const candidate = targetTitle || request.replace(/[^a-zA-Z0-9\s:&()-]/g, '').trim().slice(0, 90) || 'Research request';
+  const sourceClause = sourceContext ? ` Starting from ${sourceContext.kind} on ${sourceContext.origin.substrate}.` : '';
   return {
     workingTitle: candidate,
-    objective: `Develop an evidence-backed ${intentLabel(intent)} treatment for: ${request}`,
+    objective: `Develop an evidence-backed ${intentLabel(intent)} treatment for: ${request}.${sourceClause}`,
     researchQuestions: [
       'What is already established in BITwiki and what is only provisional?',
-      'Which BIThub discussions, artifacts, or agent outputs contain reusable signal?',
+      'Which BIThub discussions, artifacts, conversations, or agent outputs contain reusable signal?',
       'Which claims require external or primary-source verification?',
       intent === 'semantic-model'
         ? `Which stable relationships need explicit SMW predicates or reusable Concepts${semanticFactCount ? `, given ${semanticFactCount} current semantic fact groups on the target` : ''}?`
@@ -24,8 +39,8 @@ function fallbackPlan(request: string, evidence: any[], intent: ResearchIntent, 
       : intent === 'lua-projection'
         ? ['Repeated computation/query need', 'Input contract', 'Transformation rules', 'Output projection', 'Validation and failure modes']
         : ['Scope', 'Established evidence', 'System relationships', 'Open questions', 'References and provenance'],
-    evidenceGaps: evidence.length ? ['Validate material not supported by the current Hub/Wiki corpus.'] : ['No relevant internal evidence was retrieved; broaden discovery before drafting.'],
-    nextActions: ['Review preflight and internal evidence', 'Collect missing primary sources', 'Model the durable output', 'Validate claims/provenance', 'Move through the canonical review lifecycle'],
+    evidenceGaps: evidence.length ? ['Validate material not supported by the current ecosystem corpus.'] : ['No relevant internal evidence was retrieved; broaden discovery before drafting.'],
+    nextActions: ['Review source context, preflight, and internal evidence', 'Collect missing primary sources', 'Model the durable output', 'Validate claims/provenance', 'Move through the canonical review lifecycle'],
   };
 }
 
@@ -34,6 +49,7 @@ export async function POST(request: NextRequest) {
   const researchRequest = typeof body?.request === 'string' ? body.request.trim().slice(0, 8000) : '';
   const intent = INTENTS.includes(body?.intent) ? body.intent as ResearchIntent : 'new-page';
   const targetTitle = typeof body?.targetTitle === 'string' ? body.targetTitle.trim().slice(0, 240) : '';
+  const sourceContext = safeContext(body?.context);
   if (!researchRequest) return NextResponse.json({ error: 'missing_request' }, { status: 400 });
 
   const [preflight, semanticResult] = await Promise.all([
@@ -41,14 +57,17 @@ export async function POST(request: NextRequest) {
     targetTitle ? semanticSubject(targetTitle).catch(() => null) : Promise.resolve(null),
   ]);
   const semanticFacts = semanticResult?.facts || [];
-  const searchQuery = [targetTitle, researchRequest].filter(Boolean).join(' ');
+  const contextTerms = sourceContext
+    ? [sourceContext.kind, sourceContext.identity?.executor?.label, sourceContext.origin.substrate].filter(Boolean).join(' ')
+    : '';
+  const searchQuery = [targetTitle, researchRequest, contextTerms].filter(Boolean).join(' ');
   const search = await federatedSearch(searchQuery, 8);
   const evidence = search.resources.slice(0, 8);
   const hydratedEvidence = await hydrateResources(evidence, 8);
   const credential = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
   const model = process.env.BITHUB_RESEARCH_MODEL || process.env.BITHUB_PUBLIC_MODEL || 'google/gemini-3.6-flash';
 
-  let plan = fallbackPlan(researchRequest, evidence, intent, targetTitle || undefined, semanticFacts.length);
+  let plan = fallbackPlan(researchRequest, evidence, intent, targetTitle || undefined, semanticFacts.length, sourceContext);
   let aiPlanned = false;
 
   if (credential) {
@@ -64,11 +83,11 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `Design a rigorous BITwiki research packet for a ${intentLabel(intent)}. Internal Hub/Wiki content and current SMW facts are context, not automatically proof. Respect the preflight recommendation and separate established evidence from gaps. Return JSON only.`,
+            content: `Design a rigorous BITwiki research packet for a ${intentLabel(intent)}. Internal ecosystem content and current SMW facts are context, not automatically proof. Preserve the supplied source object's provenance and authority. Respect the preflight recommendation and separate established evidence from gaps. Return JSON only.`,
           },
           {
             role: 'user',
-            content: `REQUEST:\n${researchRequest}\nTARGET:\n${targetTitle || '(not fixed)'}\nPREFLIGHT:\n${JSON.stringify(preflight)}\nCURRENT SEMANTIC FACTS:\n${JSON.stringify(semanticFacts.slice(0, 24))}\n\nINTERNAL EVIDENCE:\n${sourceText}`,
+            content: `REQUEST:\n${researchRequest}\nTARGET:\n${targetTitle || '(not fixed)'}\nSOURCE OBJECT:\n${sourceContext ? JSON.stringify(sourceContext) : '(free intent)'}\nPREFLIGHT:\n${JSON.stringify(preflight)}\nCURRENT SEMANTIC FACTS:\n${JSON.stringify(semanticFacts.slice(0, 24))}\n\nINTERNAL EVIDENCE:\n${sourceText}`,
           },
         ],
         stream: false,
@@ -109,6 +128,7 @@ export async function POST(request: NextRequest) {
     request: researchRequest,
     intent,
     targetTitle: targetTitle || null,
+    sourceContext,
     knowledgeStatus: activeMatch?.status || 'requested',
     executionStatus: 'not-dispatched',
     preflight,
