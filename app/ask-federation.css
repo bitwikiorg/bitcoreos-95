@@ -30,8 +30,13 @@
 .context-capabilities { display:flex; flex-wrap:wrap; gap:4px; margin:8px 0; }
 .context-capabilities span { padding:2px 5px; border:1px solid #777168; background:#ece8df; font:8px var(--mono); }
 .context-relation { padding:4px 0; color:#5f5a53; font:9px var(--mono); }
+.composer-actions { display:flex; align-items:center; gap:5px; }
+.composer-actions > button:not(.spectral-button) { padding:5px 8px; border:1px solid #777168; background:#ded8ce; font:9px var(--mono); }
+.composer-actions > button:disabled { opacity:.45; cursor:not-allowed; }
+.local-context-details { margin:10px; padding-top:8px; border-top:1px solid #bbb4aa; }
 
 @media (max-width:900px) {
   .remote-conversation-actions { align-items:flex-start; flex-direction:column; }
   .conversation-filters { overflow:auto; }
+  .composer-actions { flex-wrap:wrap; justify-content:flex-end; }
 }
