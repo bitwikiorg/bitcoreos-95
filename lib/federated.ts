@@ -1,4 +1,5 @@
 import type { Resource, SearchResponse, SourceHealth } from './resources';
+import { publicHubTopicContext, publicWikiPageContext } from './context';
 
 export const HUB = 'https://hub.bitwiki.org';
 export const WIKI = 'https://bitwiki.org';
@@ -49,19 +50,27 @@ export async function searchHub(query: string, limit = 12): Promise<Resource[]> 
   }
 
   return topics.slice(0, limit).map((topic: any) => {
-    const hit = bestPostByTopic.get(Number(topic.id));
+    const topicId = Number(topic.id);
+    const hit = bestPostByTopic.get(topicId);
+    const topicUrl = `${HUB}/t/${topic.slug}/${topicId}`;
     return {
-      id: `hub:${topic.id}`,
+      id: `hub:${topicId}`,
       source: 'hub' as const,
       kind: 'topic' as const,
       title: topic.title ?? 'Untitled topic',
       excerpt: stripHtml(hit?.blurb ?? topic.blurb ?? ''),
-      url: `${HUB}/t/${topic.slug}/${topic.id}`,
+      url: topicUrl,
       tags: Array.isArray(topic.tags) ? topic.tags : [],
       author: hit?.username,
       score: Number(topic.posts_count ?? 0),
+      context: publicHubTopicContext({
+        topicId,
+        url: topicUrl,
+        author: hit?.username,
+        categoryId: Number(topic.category_id) || undefined,
+      }),
       metadata: {
-        topicId: topic.id,
+        topicId,
         categoryId: topic.category_id,
         posts: topic.posts_count,
         views: topic.views,
@@ -89,14 +98,17 @@ function wikiUrl(title: string) {
 
 function wikiResource(page: any, mode: string): Resource {
   const title = String(page.title ?? page.key ?? 'Untitled');
+  const pageId = page.pageid ?? page.id ?? title;
+  const url = wikiUrl(title);
   return {
-    id: `wiki:${page.pageid ?? page.id ?? title}`,
+    id: `wiki:${pageId}`,
     source: 'wiki',
     kind: 'wiki-page',
     title,
     excerpt: stripHtml(page.excerpt ?? page.snippet ?? page.description ?? ''),
-    url: wikiUrl(title),
+    url,
     score: Number(page.size ?? 0),
+    context: publicWikiPageContext({ id: pageId, title, url }),
     metadata: {
       pageId: page.pageid ?? page.id,
       wordCount: page.wordcount,
