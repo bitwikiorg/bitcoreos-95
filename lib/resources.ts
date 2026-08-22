@@ -16,6 +16,8 @@ export type ResourceKind =
   | 'property'
   | 'artifact'
   | 'construct'
+  | 'agent'
+  | 'persona'
   | 'core'
   | 'core-run'
   | 'node'
