@@ -9,6 +9,7 @@ type Mode = 'feed' | 'search' | 'spaces' | 'agents';
 type HubOverview = { latest?: any[]; categories?: any[] };
 type WikiOverview = { recent?: any[]; categories?: any[] };
 type AgentData = { registryUrl?: string; agents?: Array<{ index: number; name: string; username?: string; registryIdentity: string; intent: string; family: string }> };
+type SpaceState = null | { id: number; slug: string; label: string; name: string; description?: string; url?: string };
 
 const SPACE_DEFS = [
   { label: 'Discussions', category: 'Community', glyph: '◌' },
@@ -41,6 +42,9 @@ export function Explorer() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [filter, setFilter] = useState<'all' | 'hub' | 'wiki'>('all');
   const [loading, setLoading] = useState(false);
+  const [activeSpace, setActiveSpace] = useState<SpaceState>(null);
+  const [spaceResources, setSpaceResources] = useState<Resource[]>([]);
+  const [spaceLoading, setSpaceLoading] = useState(false);
 
   useEffect(() => {
     const seed = sessionStorage.getItem('bitcoreos-search-seed');
@@ -98,6 +102,27 @@ export function Explorer() {
       const payload = await response.json();
       setData(payload);
     } finally { setLoading(false); }
+  }
+
+  async function openSpace(space: any) {
+    const id = Number(space?.id);
+    const slug = String(space?.slug || '').trim();
+    if (!Number.isInteger(id) || id <= 0 || !slug) {
+      if (space?.url) window.open(space.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setSpaceLoading(true);
+    setSelected(null);
+    setSpaceResources([]);
+    setActiveSpace({ id, slug, label: String(space.label), name: String(space.name || space.category || space.label), description: space.description, url: space.url });
+    try {
+      const response = await fetch(`/api/hub/category?id=${id}&slug=${encodeURIComponent(slug)}`);
+      const payload = await response.json();
+      if (response.ok) {
+        setSpaceResources(Array.isArray(payload?.resources) ? payload.resources : []);
+        setActiveSpace((current) => current ? { ...current, name: payload?.category?.name || current.name, description: payload?.category?.description || current.description, url: payload?.category?.url || current.url } : current);
+      }
+    } finally { setSpaceLoading(false); }
   }
 
   function submit(event: FormEvent) { event.preventDefault(); void search(); }
@@ -180,20 +205,41 @@ export function Explorer() {
           </>
         )}
 
-        {mode === 'spaces' && (
+        {mode === 'spaces' && !activeSpace && (
           <div className="space-directory sunken">
-            <div className="explorer-empty space-intro"><b>BIThub spaces</b><span>Curated entry points over the real Discourse categories.</span></div>
+            <div className="explorer-empty space-intro"><b>BIThub spaces</b><span>Clear entry points over the actual Discourse categories.</span></div>
             <div className="space-grid">
               {spaces.map((space) => (
                 <article className="space-card" key={space.label}>
                   <div className="space-card-head"><span>{space.glyph}</span><strong>{space.label}</strong><small>{typeof space.topicCount === 'number' ? space.topicCount : ''}</small></div>
                   <p>{space.description || `Open the ${space.label} area in BIThub.`}</p>
                   <div className="space-card-actions">
-                    <button onClick={() => { setQuery(space.category); void search(space.category); }}>Explore</button>
+                    <button onClick={() => void openSpace(space)}>Explore</button>
                     {space.url && <a href={space.url} target="_blank" rel="noreferrer">BIThub ↗</a>}
                   </div>
                 </article>
               ))}
+            </div>
+          </div>
+        )}
+
+        {mode === 'spaces' && activeSpace && (
+          <div className="space-stream">
+            <div className="space-stream-head">
+              <button onClick={() => { setActiveSpace(null); setSpaceResources([]); setSelected(null); }}>← Spaces</button>
+              <div><b>{activeSpace.label}</b><span>{activeSpace.description || activeSpace.name}</span></div>
+              {activeSpace.url && <a href={activeSpace.url} target="_blank" rel="noreferrer">BIThub ↗</a>}
+            </div>
+            <div className="resource-list sunken relaxed-list">
+              {spaceLoading && <div className="quiet-empty">Reading {activeSpace.label}…</div>}
+              {!spaceLoading && spaceResources.map((resource) => (
+                <button key={resource.id} className="resource-row relaxed-row" data-selected={selected?.id === resource.id} onClick={() => setSelected(resource)}>
+                  <span className="source-chip hub">HUB</span>
+                  <div><strong>{resource.title}</strong><p>{resource.excerpt || 'BIThub topic'}</p></div>
+                  <small>{compactDate(String(resource.metadata?.lastPostedAt || ''))}</small>
+                </button>
+              ))}
+              {!spaceLoading && !spaceResources.length && <div className="quiet-empty">No public topics returned for this space.</div>}
             </div>
           </div>
         )}
