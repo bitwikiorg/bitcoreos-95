@@ -39,7 +39,6 @@ export async function GET(request: NextRequest) {
         const context = publicHubTopicContext({
           topicId,
           url: topicUrl,
-          author: topic?.last_poster_username || undefined,
           categoryId: id,
           kind: definition ? 'CORE definition' : isCores ? 'CORE run' : 'Discussion',
           substrate: definition ? 'CORE catalog topic' : isCores ? 'CORE activation topic' : 'forum topic',
@@ -52,18 +51,18 @@ export async function GET(request: NextRequest) {
         return {
           id: `hub:${topicId}`,
           source: 'hub' as const,
-          kind: definition ? 'core' as const : 'topic' as const,
+          kind: definition ? 'core' as const : isCores ? 'core-run' as const : 'topic' as const,
           title,
           excerpt: stripHtml(String(topic.excerpt || topic.blurb || '')).slice(0, 360) || `${Number(topic.posts_count || 0)} posts · ${Number(topic.views || 0)} views`,
           url: topicUrl,
           tags: Array.isArray(topic.tags) ? topic.tags.map((tag: any) => typeof tag === 'string' ? tag : String(tag?.name || '')).filter(Boolean) : [],
-          author: topic?.last_poster_username || undefined,
           context,
           metadata: {
             topicId,
             categoryId: id,
             semanticKind: context.kind,
             lastPostedAt: topic.last_posted_at || topic.bumped_at || topic.created_at,
+            lastPosterUsername: topic?.last_poster_username || undefined,
             posts: Number(topic.posts_count || 0),
             views: Number(topic.views || 0),
           },
