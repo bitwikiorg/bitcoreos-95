@@ -1,14 +1,14 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { HUB } from '@/lib/federated';
-import { SESSION_COOKIE, verifySession } from '@/lib/session';
+import { authConfigured, SESSION_COOKIE, verifySession } from '@/lib/session';
 import { USER_API_HANDSHAKE_COOKIE, type UserApiHandshake } from '@/lib/delegated';
 import { seal } from '@/lib/secure-cookie';
 
 export async function GET(request: NextRequest) {
   const user = verifySession(request.cookies.get(SESSION_COOKIE)?.value);
   if (!user) return NextResponse.json({ error: 'sso_identity_required' }, { status: 401 });
-  if (!process.env.SESSION_SECRET) return NextResponse.json({ error: 'SESSION_SECRET is not configured' }, { status: 503 });
+  if (!authConfigured()) return NextResponse.json({ error: 'authentication_unavailable' }, { status: 503 });
 
   const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
     modulusLength: 2048,
@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
   const nonce = crypto.randomBytes(18).toString('hex');
   const clientId = `bitcoreos95-${crypto.randomBytes(12).toString('hex')}`;
   const scopes = ['read', 'session_info'];
-  const callback = new URL('/api/auth/user-key/callback', request.nextUrl.origin).toString();
+  const publicOrigin = process.env.BITCOREOS_PUBLIC_URL?.replace(/\/$/, '') || (process.env.VERCEL_ENV === 'production' ? 'https://bitcoreos-95.vercel.app' : request.nextUrl.origin);
+  const callback = `${publicOrigin}/api/auth/user-key/callback`;
 
   const handshake: UserApiHandshake = {
     nonce,
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
   response.cookies.set(USER_API_HANDSHAKE_COOKIE, seal(handshake), {
     httpOnly: true,
     sameSite: 'lax',
-    secure: request.nextUrl.protocol === 'https:',
+    secure: true,
     path: '/',
     maxAge: 10 * 60,
   });
