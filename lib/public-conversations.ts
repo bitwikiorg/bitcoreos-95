@@ -57,7 +57,6 @@ function coreRunSummary(topic: any, category: CoreCategory): ConversationSummary
       url,
     },
     identity: {
-      author: topic?.last_poster_username ? String(topic.last_poster_username) : undefined,
       executor: { kind: 'core', id: executor.id, label: executor.label },
     },
     authority: { visibility: 'public', mode: 'public-read' },
@@ -111,6 +110,21 @@ export async function readPublicCoreConversation(topicId: number) {
     createdAt: typeof post?.created_at === 'string' ? post.created_at : undefined,
     url: `${HUB}/t/${data?.slug || 'topic'}/${topicId}/${post?.post_number || 1}`,
   }));
+
+  const firstAuthor = messages[0]?.username && messages[0].username !== 'unknown' ? messages[0].username : undefined;
+  const participants = Array.from(new Set(messages.map((message) => message.username).filter((username) => username && username !== 'unknown')));
+  summary.context = {
+    ...summary.context,
+    identity: {
+      ...summary.context.identity,
+      author: firstAuthor,
+      participants,
+    },
+    metadata: {
+      ...summary.context.metadata,
+      hydratedPosts: messages.length,
+    },
+  };
 
   return { summary, messages };
 }
