@@ -1,5 +1,5 @@
 import type { Resource, SearchResponse, SourceHealth } from './resources';
-import type { ContextCapsule } from './context';
+import type { ActorRef, ContextCapsule } from './context';
 import { publicHubTopicContext, publicWikiPageContext } from './context';
 
 export const HUB = 'https://hub.bitwiki.org';
@@ -44,7 +44,7 @@ function simpleHubContext(input: {
   substrate: string;
   canonicalRef: string;
   url: string;
-  subject?: ContextCapsule['identity'] extends infer I ? any : never;
+  subject?: ActorRef;
   metadata?: Record<string, unknown>;
   capabilities?: string[];
 }): ContextCapsule {
