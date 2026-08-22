@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { federatedSearch } from '@/lib/federated';
 import { hydrateResources } from '@/lib/hydration';
-import type { HydratedResource } from '@/lib/resources';
+import type { HydratedResource, Resource } from '@/lib/resources';
 
 const WINDOW_MS = 5 * 60 * 1000;
 const MAX_REQUESTS = 12;
@@ -23,6 +23,43 @@ function limited(request: NextRequest) {
   return current.count > MAX_REQUESTS;
 }
 
+function publicFocus(value: any): Resource | null {
+  if (!value || typeof value !== 'object') return null;
+  if (value.source !== 'hub' && value.source !== 'wiki') return null;
+  if (value.context?.authority?.visibility && value.context.authority.visibility !== 'public') return null;
+
+  const title = typeof value.title === 'string' ? value.title.trim().slice(0, 300) : '';
+  if (!title) return null;
+
+  if (value.source === 'hub') {
+    const topicId = Number(value?.metadata?.topicId || String(value?.id || '').replace(/^hub:/, '').split(':')[0]);
+    if (!Number.isInteger(topicId) || topicId <= 0) return null;
+    return {
+      id: `hub:${topicId}`,
+      source: 'hub',
+      kind: value.kind || 'topic',
+      title,
+      excerpt: typeof value.excerpt === 'string' ? value.excerpt.slice(0, 800) : undefined,
+      url: typeof value.url === 'string' ? value.url : '',
+      author: typeof value.author === 'string' ? value.author : undefined,
+      metadata: { ...(value.metadata || {}), topicId },
+      context: value.context,
+    } as Resource;
+  }
+
+  return {
+    id: typeof value.id === 'string' ? value.id : `wiki:${title}`,
+    source: 'wiki',
+    kind: value.kind || 'wiki-page',
+    title,
+    excerpt: typeof value.excerpt === 'string' ? value.excerpt.slice(0, 800) : undefined,
+    url: typeof value.url === 'string' ? value.url : '',
+    author: typeof value.author === 'string' ? value.author : undefined,
+    metadata: value.metadata || {},
+    context: value.context,
+  } as Resource;
+}
+
 function evidenceText(resources: HydratedResource[]) {
   return resources.map((resource, index) => {
     const prefix = resource.source === 'hub' ? 'H' : 'W';
@@ -39,6 +76,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}));
   const messages = Array.isArray(body?.messages) ? body.messages as ChatMessage[] : [];
+  const focus = publicFocus(body?.focus);
   const clean = messages
     .filter((message) => message && (message.role === 'user' || message.role === 'assistant') && typeof message.content === 'string')
     .slice(-12)
@@ -47,7 +85,10 @@ export async function POST(request: NextRequest) {
   if (!question) return NextResponse.json({ error: 'missing_question' }, { status: 400 });
 
   const search = await federatedSearch(question, 6);
-  const evidence = search.resources.slice(0, 6);
+  const candidates = focus
+    ? [focus, ...search.resources.filter((resource) => resource.id !== focus.id)]
+    : search.resources;
+  const evidence = candidates.slice(0, 6);
   const hydratedEvidence = await hydrateResources(evidence, 6);
   const credential = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
   const model = process.env.BITHUB_PUBLIC_MODEL || 'google/gemini-3.6-flash';
@@ -56,6 +97,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       error: 'ai_gateway_not_configured',
       evidence,
+      focus: focus?.id || null,
       sources: search.sources,
       hydratedCount: hydratedEvidence.filter((item) => !item.details?.hydrationError).length,
       model: null,
@@ -65,6 +107,7 @@ export async function POST(request: NextRequest) {
   const system = [
     'You are the public BIThub + BITwiki research guide inside BITCOREOS-95.',
     'Answer using the supplied public source content as the authority for claims about BIThub and BITwiki.',
+    focus ? 'The first evidence object was explicitly selected by the user. Treat it as the focus object, while still reconciling it with other relevant evidence.' : '',
     'Search snippets are discovery signals; hydrated source content is stronger evidence.',
     'Do not invent private content, permissions, user data, platform features, or source facts.',
     'If evidence is insufficient, say what is missing and suggest a narrower search.',
@@ -73,7 +116,7 @@ export async function POST(request: NextRequest) {
     '',
     'PUBLIC EVIDENCE:',
     evidenceText(hydratedEvidence),
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   const upstream = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
     method: 'POST',
@@ -98,6 +141,7 @@ export async function POST(request: NextRequest) {
       status: upstream.status,
       detail: data?.error?.message ?? data?.error ?? 'upstream failure',
       evidence,
+      focus: focus?.id || null,
       sources: search.sources,
       hydratedCount: hydratedEvidence.filter((item) => !item.details?.hydrationError).length,
       model,
@@ -108,6 +152,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     answer: typeof answer === 'string' ? answer : 'No answer returned.',
     evidence,
+    focus: focus?.id || null,
     sources: search.sources,
     hydratedCount: hydratedEvidence.filter((item) => !item.details?.hydrationError).length,
     model: data?.model ?? model,
