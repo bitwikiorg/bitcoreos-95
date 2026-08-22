@@ -29,7 +29,7 @@ const titles: Record<View, string> = {
   ontology: 'Knowledge Graph',
   ask: 'Ask',
   research: 'Research',
-  my: 'My BIThub',
+  my: 'Identity',
 };
 
 export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
@@ -58,7 +58,6 @@ export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
           <button className="os-brand-button" onClick={() => router.push('/')} aria-label="Open BITCOREOS-95 navigator">
             <b>BITCOREOS-95</b><span>// {titles[initialView]}</span>
           </button>
-          <a className="title-hub-link" href="https://hub.bitwiki.org" target="_blank" rel="noreferrer">Open BIThub ↗</a>
         </header>
 
         <nav className="os-tabstrip" aria-label="Primary navigation">
@@ -66,7 +65,7 @@ export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
             <button key={route.id} data-active={initialView === route.id || (route.id === 'explorer' && initialView === 'ontology')} onClick={() => router.push(route.href)}>{route.label}</button>
           ))}
           <div className="os-tab-spacer" />
-          <button className="identity-button" data-active={initialView === 'my'} onClick={() => router.push('/my')}>
+          <button className="identity-button" data-active={initialView === 'my'} onClick={() => router.push('/my')} aria-label="Open identity and Mine projections">
             {auth.user ? `@${auth.user.username}` : 'Anonymous'}
           </button>
           {auth.user
