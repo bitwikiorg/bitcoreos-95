@@ -5,10 +5,21 @@ import { useRouter } from 'next/navigation';
 import type { HydratedResource, Resource, SearchResponse } from '@/lib/resources';
 import { SemanticFacts, type SemanticFact } from './SemanticFacts';
 
-type Mode = 'feed' | 'search' | 'agents';
+type Mode = 'feed' | 'search' | 'spaces' | 'agents';
 type HubOverview = { latest?: any[]; categories?: any[] };
 type WikiOverview = { recent?: any[]; categories?: any[] };
 type AgentData = { registryUrl?: string; agents?: Array<{ index: number; name: string; username?: string; registryIdentity: string; intent: string; family: string }> };
+
+const SPACE_DEFS = [
+  { label: 'Discussions', category: 'Community', glyph: '◌' },
+  { label: 'Nodes', category: 'Nodes', glyph: '◇' },
+  { label: 'Cores', category: 'Cores', glyph: '◆' },
+  { label: 'Markets', category: 'Marketplace', glyph: '¤' },
+  { label: 'Artifacts', category: 'Artifacts', glyph: '▣' },
+  { label: 'Workspaces', category: 'Workspaces', glyph: '▤' },
+  { label: 'Feeds', category: 'Feeds', glyph: '≈' },
+  { label: 'BITCOREOS', category: 'BITCOREOS', glyph: '⊙' },
+] as const;
 
 function compactDate(value?: string) {
   if (!value) return '';
@@ -107,6 +118,11 @@ export function Explorer() {
       .slice(0, 24);
   }, [hub, wiki]);
 
+  const spaces = useMemo(() => SPACE_DEFS.map((definition) => {
+    const category = (hub.categories || []).find((item: any) => String(item.name).toLowerCase() === definition.category.toLowerCase());
+    return category ? { ...definition, ...category } : { ...definition };
+  }), [hub]);
+
   const visible = useMemo(() => {
     const items = mode === 'feed' ? feed : (data?.resources || []);
     return filter === 'all' ? items : items.filter((resource) => resource.source === filter);
@@ -131,8 +147,9 @@ export function Explorer() {
         <div className="explore-modebar">
           <button data-active={mode === 'feed'} onClick={() => { setMode('feed'); setSelected(null); }}>Feed</button>
           <button data-active={mode === 'search'} onClick={() => setMode('search')}>Search</button>
+          <button data-active={mode === 'spaces'} onClick={() => { setMode('spaces'); setSelected(null); }}>Spaces</button>
           <button data-active={mode === 'agents'} onClick={() => { setMode('agents'); setSelected(null); }}>Agents</button>
-          <button onClick={() => router.push('/ontology')}>Knowledge graph ↗</button>
+          <button className="secondary-mode" onClick={() => router.push('/ontology')}>Graph ↗</button>
         </div>
 
         {mode === 'search' && (
@@ -143,7 +160,7 @@ export function Explorer() {
           </form>
         )}
 
-        {mode !== 'agents' && (
+        {(mode === 'feed' || mode === 'search') && (
           <>
             <div className="result-tabs compact-tabs">
               <button data-active={filter === 'all'} onClick={() => setFilter('all')}>All</button>
@@ -163,6 +180,24 @@ export function Explorer() {
           </>
         )}
 
+        {mode === 'spaces' && (
+          <div className="space-directory sunken">
+            <div className="explorer-empty space-intro"><b>BIThub spaces</b><span>Curated entry points over the real Discourse categories.</span></div>
+            <div className="space-grid">
+              {spaces.map((space) => (
+                <article className="space-card" key={space.label}>
+                  <div className="space-card-head"><span>{space.glyph}</span><strong>{space.label}</strong><small>{typeof space.topicCount === 'number' ? space.topicCount : ''}</small></div>
+                  <p>{space.description || `Open the ${space.label} area in BIThub.`}</p>
+                  <div className="space-card-actions">
+                    <button onClick={() => { setQuery(space.category); void search(space.category); }}>Explore</button>
+                    {space.url && <a href={space.url} target="_blank" rel="noreferrer">BIThub ↗</a>}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
+
         {mode === 'agents' && (
           <div className="agent-directory sunken">
             <div className="explorer-empty agent-intro"><b>BIThub agent registry</b><span>Public constructs from the same registry used by the official B8 agent plugin.</span></div>
@@ -179,13 +214,15 @@ export function Explorer() {
           </div>
         )}
 
-        <details className="browse-details">
-          <summary>Browse categories</summary>
-          <div className="browse-grid">
-            <div><b>BIThub</b>{(hub.categories || []).slice(0, 12).map((category: any) => <button key={category.id} onClick={() => { setQuery(category.name); void search(category.name); }}>{category.name}</button>)}</div>
-            <div><b>BITwiki</b>{(wiki.categories || []).slice(0, 12).map((category: any) => <button key={category.name} onClick={() => { setQuery(category.name); void search(category.name); }}>{category.name}</button>)}</div>
-          </div>
-        </details>
+        {(mode === 'feed' || mode === 'search') && (
+          <details className="browse-details">
+            <summary>More categories</summary>
+            <div className="browse-grid">
+              <div><b>BIThub</b>{(hub.categories || []).slice(0, 12).map((category: any) => <button key={category.id} onClick={() => { setQuery(category.name); void search(category.name); }}>{category.name}</button>)}</div>
+              <div><b>BITwiki</b>{(wiki.categories || []).slice(0, 12).map((category: any) => <button key={category.name} onClick={() => { setQuery(category.name); void search(category.name); }}>{category.name}</button>)}</div>
+            </div>
+          </details>
+        )}
       </section>
 
       <aside className="explore-reader win-panel raised" data-empty={!selected}>
