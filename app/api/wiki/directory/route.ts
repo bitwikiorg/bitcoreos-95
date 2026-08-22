@@ -26,13 +26,20 @@ async function wiki(params: Record<string, string>) {
   return data;
 }
 
-function namespaceId(namespaces: Record<string, any>, target: string) {
+function namespaceId(namespaces: unknown, target: string) {
   const expected = target.toLowerCase();
-  for (const [id, namespace] of Object.entries(namespaces || {})) {
+  const entries = Array.isArray(namespaces)
+    ? namespaces.map((namespace, index) => [String(namespace?.id ?? index), namespace] as const)
+    : Object.entries((namespaces && typeof namespaces === 'object') ? namespaces as Record<string, any> : {});
+
+  for (const [key, namespace] of entries) {
     const names = [namespace?.canonical, namespace?.name, namespace?.['*']]
       .filter((value) => typeof value === 'string')
       .map((value) => String(value).toLowerCase());
-    if (names.includes(expected)) return Number(id);
+    if (names.includes(expected)) {
+      const id = Number(namespace?.id ?? key);
+      return Number.isInteger(id) ? id : null;
+    }
   }
   return null;
 }
