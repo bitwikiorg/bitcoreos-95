@@ -41,6 +41,8 @@ const intentOptions: Array<{ value: ResearchIntent; label: string; hint: string 
   { value: 'coverage-audit', label: 'Coverage audit', hint: 'Identify a prioritized set of missing or weak knowledge targets.' },
 ];
 
+const validIntents = new Set<ResearchIntent>(intentOptions.map((option) => option.value));
+
 export function ResearchWorkspace() {
   const [request, setRequest] = useState('');
   const [intent, setIntent] = useState<ResearchIntent>('new-page');
@@ -59,9 +61,13 @@ export function ResearchWorkspace() {
     try {
       const seed = sessionStorage.getItem('bitcoreos-research-seed');
       const target = sessionStorage.getItem('bitcoreos-research-target');
+      const seededIntent = sessionStorage.getItem('bitcoreos-research-intent') as ResearchIntent | null;
       const context = sessionStorage.getItem('bitcoreos-context-object');
       if (seed) { sessionStorage.removeItem('bitcoreos-research-seed'); setRequest(seed); }
-      if (target) { sessionStorage.removeItem('bitcoreos-research-target'); setTargetTitle(target); setIntent('revise-page'); }
+      if (seededIntent) sessionStorage.removeItem('bitcoreos-research-intent');
+      if (target) { sessionStorage.removeItem('bitcoreos-research-target'); setTargetTitle(target); }
+      if (seededIntent && validIntents.has(seededIntent)) setIntent(seededIntent);
+      else if (target) setIntent('revise-page');
       if (context) {
         sessionStorage.removeItem('bitcoreos-context-object');
         const parsed = JSON.parse(context) as ContextCapsule;
