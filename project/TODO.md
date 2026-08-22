@@ -8,57 +8,128 @@ Updated: 2026-08-21
 - [x] Add BIThub topic hydration using public Discourse topic/post APIs.
 - [x] Add BITwiki page hydration using MediaWiki Action API.
 - [x] Add `/api/resource` hydration endpoint.
-- [x] Make Explorer hydrate the selected result and render source content internally.
-- [x] Make Ask ground from bounded hydrated source content, not only search snippets.
-- [x] Make Research planning use bounded hydrated source content.
-- [x] Verify production build and live Hub/Wiki hydration.
+- [x] Make Explorer hydrate selected resources internally.
+- [x] Make Ask ground from bounded hydrated source content.
+- [x] Make Research use bounded hydrated source content.
+- [x] Verify live Hub/Wiki hydration.
 
-Verified 2026-08-21 on production with BIThub topic hydration and BITwiki rendered-page fallback.
+## M2 — Identity + personal BIThub
 
-## Active — M2 Identity + delegated BIThub
+Implemented:
 
-- [ ] Configure `DISCOURSE_SSO_SECRET` and `SESSION_SECRET` in production.
-- [ ] Verify DiscourseConnect login/callback against BIThub.
-- [ ] Add scoped User API Key authorization flow.
-- [ ] Add user-scoped notifications.
-- [ ] Add bookmarks/tracked topics where scopes permit.
-- [ ] Do not use a master admin key as the generic user authority path.
+- [x] Configure production `DISCOURSE_SSO_SECRET`.
+- [x] Production auth reports configured.
+- [x] Anonymous UI explicitly renders Anonymous / public-read state.
+- [x] Add Sign in with BIThub actions.
+- [x] Verify `/api/auth/login` redirects to BIThub DiscourseConnect provider.
+- [x] Use canonical production callback URL.
+- [x] Implement signed local BIThub identity session.
+- [x] Implement scoped Discourse User API Key handshake.
+- [x] Use RSA/OAEP for delegated key exchange.
+- [x] Encrypt delegated credential cookies.
+- [x] Add notifications projection.
+- [x] Add bookmarks/tracking/watching projection.
+- [x] Add public contribution trail and real contribution indicators.
+- [x] Add provisional same-username MediaWiki User: namespace/contribution view.
+- [x] Keep public identity separate from delegated authority.
+- [x] Do not use a master admin key as the generic user authority path.
 
-Blocker: production SSO secrets are not currently configured.
+Verification remaining:
 
-## Parallel unblocked — M3 Agent capability projection
+- [ ] Complete one real BIThub DiscourseConnect login/callback in a browser.
+- [ ] Verify signed-in `/my` profile against that real session.
+- [ ] Complete one real User API Key approval/callback.
+- [ ] Verify Saved + inbox against real delegated state.
 
-- [ ] Add public agent-registry reader compatible with `agent.b8-plugin` registry semantics.
-- [ ] Surface agent profile/resources in Explorer/Research.
-- [ ] Map browser actions to canonical B8 capability names where applicable.
+## Completed — M3 Agent capability projection
 
-## Parallel unblocked — M4 Canonical Research state
+- [x] Read the public agent registry used by `agent.b8-plugin`.
+- [x] Parse the live registry into typed agent resources.
+- [x] Surface agents in Explore.
+- [x] Reuse canonical B8 read/write capability names.
+- [x] Distinguish registry identities from actual Discourse user accounts.
 
-- [ ] Query Cargo `Knowledge_requests`.
-- [ ] Add request duplicate/existing-page preflight.
-- [ ] Replace prototype `planned` knowledge state with Cargo lifecycle state.
-- [ ] Keep n8n execution status separate from knowledge lifecycle status.
+## M4 — Canonical Research state
 
-## Next — M5 n8n broker
+Implemented:
 
-- [ ] Define typed action envelope.
-- [ ] Add correlation IDs and idempotency keys.
-- [ ] Add signed/authenticated n8n request verification.
-- [ ] Add action result/status endpoint or callback contract.
-- [ ] Classify sensitive actions that must remain behind n8n policy guards.
+- [x] Add research intent taxonomy for new page, revision, category/navigation, semantic model, Lua projection, reusable artifact, and coverage audit.
+- [x] Add exact-page and overlapping-request preflight.
+- [x] Separate knowledge lifecycle from execution lifecycle.
+- [x] Attempt live Cargo `Knowledge_requests` first.
+- [x] Fall back transparently to canonical `wiki-content` Requested Knowledge state when live Cargo fails.
+- [x] Expose actual request-state source in the UI.
+- [x] Include current target SMW facts in preflight when available.
 
-## Later
+Infrastructure remaining:
 
-- [ ] Real Deploy Research pipeline.
-- [ ] SMW/Cargo-driven ontology graph.
-- [ ] Cross-system provenance model.
-- [ ] Source-controlled BITwiki candidate publication workflow.
+- [ ] Repair/deploy live Cargo `Knowledge_requests` table so Cargo can become runtime request-state authority.
+- [ ] Verify lifecycle transitions against live Cargo after repair.
 
-## Repository rules
+## Completed application layer — M5 n8n broker
+
+- [x] Define typed action envelope.
+- [x] Add correlation IDs and idempotency keys.
+- [x] Add HMAC-signed n8n request contract.
+- [x] Add server-side risk classification and allowlisted action vocabulary.
+- [x] Keep sensitive/multi-system execution behind the broker.
+
+Infrastructure remaining:
+
+- [ ] Configure `N8N_ACTION_URL`.
+- [ ] Configure `N8N_ACTION_SECRET`.
+- [ ] Verify one guarded action round trip.
+- [ ] Add/verify action-status reconciliation or callback once the real workflow endpoint is connected.
+
+## Explore / navigation
+
+- [x] Keep Feed and Search simple.
+- [x] Add curated Spaces for Discussions, Nodes, Cores, Markets, Artifacts, Workspaces, Feeds, BITCOREOS.
+- [x] Back Spaces with the real Discourse categories rather than duplicate state.
+- [x] Add native category-stream adapter.
+- [x] Open real category topics internally in Explore.
+- [x] Keep Graph secondary to Ask / Research / Explore.
+- [x] Add live SMW subject relations to BITwiki readers and Graph traversal.
+- [ ] Continue replacing broad category topology with meaningful real cross-system semantic/provenance relations as those relations become authoritative.
+
+## Personal workspace
+
+- [x] Anonymous state.
+- [x] BIThub sign-in entry point.
+- [x] Public contribution trail.
+- [x] Real metrics/contribution mix without invented XP.
+- [x] Matching BITwiki User: namespace/contributions with explicit provisional identity semantics.
+- [x] Saved work: bookmarks/tracking/watching.
+- [x] Inbox: notifications.
+- [ ] Add research requests/work trails to the personal projection once request ownership/provenance is authoritative.
+- [ ] Add more game-like organization only when it reflects real participation/state; do not invent meaningless points.
+
+## Next — M6 Real Deploy Research
+
+- [ ] Connect guarded `research.deploy` to the real n8n workflow.
+- [ ] Create/update the authoritative Requested Knowledge record.
+- [ ] Create or attach a BIThub work trail.
+- [ ] Select/dispatch B8-compatible agents or workflows.
+- [ ] Observe execution state separately from knowledge lifecycle.
+- [ ] Collect evidence/artifacts.
+- [ ] Produce reviewable source-controlled BITwiki candidate changes.
+- [ ] Preserve provenance from request -> work -> agent -> evidence -> candidate -> canonical page.
+
+## Later — identity and provenance
+
+- [ ] Choose the verified BIThub ↔ BITwiki identity bridge.
+- [ ] Treat MediaWiki `User:` namespaces as authenticated user-owned surfaces only after that bridge exists.
+- [ ] Add first-class cross-system provenance objects/relations.
+- [ ] Add source-controlled BITwiki candidate publication workflow.
+
+## Repository/UI rules
 
 - Active development stays on `main`.
-- Create branches only as intentional rollback/archive boundaries, never as routine feature branches.
+- Create branches only as intentional rollback/archive boundaries, never routine feature branches.
 - Preserve the sparse lander.
+- Ask / Research / Explore are first-class.
+- Prefer progressive disclosure over information dashboards.
 - No command palette.
 - No fake UI controls.
-- Backend capability work should not automatically add homepage complexity.
+- No developer/configuration metalanguage on public surfaces.
+- Backend capability work should not automatically increase homepage complexity.
