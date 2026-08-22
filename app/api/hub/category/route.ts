@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { HUB, stripHtml } from '@/lib/federated';
 import { publicHubTopicContext } from '@/lib/context';
-import type { Resource } from '@/lib/resources';
+import type { Resource, ResourceKind } from '@/lib/resources';
 
 function coreExecutor(title: string) {
   const match = title.match(/^\[([^\]]+)\]\s*/);
@@ -9,6 +9,36 @@ function coreExecutor(title: string) {
   if (!raw) return undefined;
   const label = /\bcore\b/i.test(raw) ? raw : `${raw} CORE`;
   return { kind: 'core' as const, id: `core:${raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`, label };
+}
+
+function categorySemantics(categoryName: string, slug: string, title: string) {
+  const normalized = categoryName.toLowerCase();
+  const slugged = slug.toLowerCase();
+  const isCores = normalized === 'cores' || slugged === 'cores';
+  const isNodes = normalized === 'nodes' || slugged === 'nodes';
+  const isWorkspaces = normalized === 'workspaces' || slugged === 'workspaces';
+
+  if (isCores) {
+    const catalog = /^about the cores category$/i.test(title.trim());
+    const definition = !catalog && /^about\b/i.test(title);
+    if (catalog) return { resourceKind: 'guide' as ResourceKind, contextKind: 'CORE catalog', substrate: 'CORE catalog guide', semanticRole: 'CORE catalog + activation index' };
+    if (definition) return { resourceKind: 'core' as ResourceKind, contextKind: 'CORE definition', substrate: 'CORE definition topic', semanticRole: 'CORE catalog + activation index' };
+    return { resourceKind: 'core-run' as ResourceKind, contextKind: 'CORE run', substrate: 'CORE activation topic', semanticRole: 'CORE catalog + activation index' };
+  }
+
+  if (isNodes) {
+    const catalog = /^about the nodes category$/i.test(title.trim());
+    if (catalog) return { resourceKind: 'guide' as ResourceKind, contextKind: 'Node catalog', substrate: 'Node catalog guide', semanticRole: 'Node catalog' };
+    return { resourceKind: 'node' as ResourceKind, contextKind: 'Node definition', substrate: 'Node catalog topic', semanticRole: 'Node catalog' };
+  }
+
+  if (isWorkspaces) {
+    const catalog = /^about the workspaces category$/i.test(title.trim());
+    if (catalog) return { resourceKind: 'guide' as ResourceKind, contextKind: 'Workspace catalog', substrate: 'Workspace catalog guide', semanticRole: 'Workspace catalog' };
+    return { resourceKind: 'workspace' as ResourceKind, contextKind: 'Workspace', substrate: 'Workspace definition topic', semanticRole: 'Workspace catalog' };
+  }
+
+  return { resourceKind: 'topic' as ResourceKind, contextKind: 'Discussion', substrate: 'forum topic', semanticRole: 'category' };
 }
 
 export async function GET(request: NextRequest) {
@@ -26,24 +56,26 @@ export async function GET(request: NextRequest) {
 
     const category = data?.category || {};
     const categoryName = String(category.name || slug);
-    const isCores = categoryName.toLowerCase() === 'cores' || slug.toLowerCase() === 'cores';
     const topics = Array.isArray(data?.topic_list?.topics) ? data.topic_list.topics : [];
+    let semanticRole = 'category';
+
     const resources: Resource[] = topics
       .filter((topic: any) => Number(topic?.id) > 0)
       .map((topic: any) => {
         const topicId = Number(topic.id);
         const title = String(topic.title || 'Untitled topic');
         const topicUrl = `${HUB}/t/${topic.slug || 'topic'}/${topicId}`;
-        const definition = isCores && /^about\b/i.test(title);
-        const executor = isCores && !definition ? coreExecutor(title) : undefined;
+        const semantics = categorySemantics(categoryName, slug, title);
+        semanticRole = semantics.semanticRole;
+        const executor = semantics.contextKind === 'CORE run' ? coreExecutor(title) : undefined;
         const context = publicHubTopicContext({
           topicId,
           url: topicUrl,
           categoryId: id,
-          kind: definition ? 'CORE definition' : isCores ? 'CORE run' : 'Discussion',
-          substrate: definition ? 'CORE catalog topic' : isCores ? 'CORE activation topic' : 'forum topic',
+          kind: semantics.contextKind,
+          substrate: semantics.substrate,
           executor,
-          provenance: isCores && !definition
+          provenance: semantics.contextKind === 'CORE run'
             ? [{ relation: 'activates', targetId: executor?.id || 'core:unknown', targetKind: 'CORE', label: executor?.label || 'CORE' }]
             : undefined,
         });
@@ -51,7 +83,7 @@ export async function GET(request: NextRequest) {
         return {
           id: `hub:${topicId}`,
           source: 'hub' as const,
-          kind: definition ? 'core' as const : isCores ? 'core-run' as const : 'topic' as const,
+          kind: semantics.resourceKind,
           title,
           excerpt: stripHtml(String(topic.excerpt || topic.blurb || '')).slice(0, 360) || `${Number(topic.posts_count || 0)} posts · ${Number(topic.views || 0)} views`,
           url: topicUrl,
@@ -74,7 +106,7 @@ export async function GET(request: NextRequest) {
         id,
         slug,
         name: categoryName,
-        semanticRole: isCores ? 'CORE catalog + activation index' : 'category',
+        semanticRole,
         description: stripHtml(String(category.description_text || category.description || '')),
         url: `${HUB}/c/${slug}/${id}`,
       },
