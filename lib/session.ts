@@ -18,10 +18,18 @@ type SignedPayload = {
   exp: number;
 };
 
-function secret() {
-  const value = process.env.SESSION_SECRET;
-  if (!value) throw new Error('SESSION_SECRET is not configured');
-  return value;
+function discourseConnectSecret() {
+  return process.env.DISCOURSE_SSO_SECRET
+    || process.env.Discourse_Connect
+    || process.env.DISCOURSE_CONNECT
+    || '';
+}
+
+function sessionSecret() {
+  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+  const root = discourseConnectSecret();
+  if (!root) throw new Error('authentication secret is unavailable');
+  return crypto.createHmac('sha256', root).update('bitcoreos-95/session/v1').digest('hex');
 }
 
 function base64url(value: Buffer | string) {
@@ -29,7 +37,7 @@ function base64url(value: Buffer | string) {
 }
 
 function signature(value: string) {
-  return crypto.createHmac('sha256', secret()).update(value).digest('base64url');
+  return crypto.createHmac('sha256', sessionSecret()).update(value).digest('base64url');
 }
 
 export function signSession(user: SessionUser) {
@@ -57,8 +65,8 @@ export function verifySession(token?: string | null): SessionUser | null {
 }
 
 export function discourseSignature(payload: string) {
-  const value = process.env.DISCOURSE_SSO_SECRET;
-  if (!value) throw new Error('DISCOURSE_SSO_SECRET is not configured');
+  const value = discourseConnectSecret();
+  if (!value) throw new Error('authentication secret is unavailable');
   return crypto.createHmac('sha256', value).update(payload).digest('hex');
 }
 
@@ -73,5 +81,5 @@ export function secureEqualHex(a: string, b: string) {
 }
 
 export function authConfigured() {
-  return Boolean(process.env.DISCOURSE_SSO_SECRET && process.env.SESSION_SECRET);
+  return Boolean(discourseConnectSecret());
 }
