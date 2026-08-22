@@ -14,6 +14,7 @@ type Conversation = {
   messages: Message[];
   updatedAt?: number;
   context: ContextCapsule;
+  focus?: Resource;
 };
 type ConversationIndex = {
   viewer: string | null;
@@ -23,7 +24,7 @@ type ConversationIndex = {
 };
 type Filter = 'all' | 'mine' | 'local' | 'pm' | 'chat' | 'runs';
 
-function localConversationContext(id: string, model?: string | null): ContextCapsule {
+function localConversationContext(id: string, model?: string | null, viewer = 'anonymous'): ContextCapsule {
   const modelId = model ? `model:${model.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : 'model:ask-runtime';
   return {
     id: `local-ai:${id}`,
@@ -34,7 +35,7 @@ function localConversationContext(id: string, model?: string | null): ContextCap
       canonicalRef: `local:ask:${id}`,
     },
     identity: {
-      viewer: 'current-browser-user',
+      viewer,
       executor: { kind: 'model', id: modelId, label: model || 'Ask runtime' },
     },
     authority: { visibility: 'local', mode: 'ai-invoke' },
@@ -62,12 +63,62 @@ function normalizeLocalConversation(value: any): Conversation | null {
   const messages = Array.isArray(value.messages)
     ? value.messages.filter((message: any) => message && (message.role === 'user' || message.role === 'assistant') && typeof message.content === 'string')
     : [];
+  const focus = value.focus && (value.focus.source === 'hub' || value.focus.source === 'wiki') ? value.focus as Resource : undefined;
   return {
     id,
     title: typeof value.title === 'string' && value.title ? value.title : 'New Ask',
     messages,
     updatedAt: Number(value.updatedAt || Date.now()),
     context: value.context?.origin && value.context?.authority ? value.context as ContextCapsule : localConversationContext(id),
+    focus,
+  };
+}
+
+function sourceRelation(context: ContextCapsule | undefined, fallbackId: string, fallbackKind: string, label?: string) {
+  return {
+    relation: 'derived-from' as const,
+    targetId: context?.id || fallbackId,
+    targetKind: context?.kind || fallbackKind,
+    label,
+  };
+}
+
+function withFocus(conversation: Conversation, focus: Resource): Conversation {
+  const relation = sourceRelation(focus.context, focus.id, focus.kind, focus.title);
+  const provenance = [relation, ...(conversation.context.provenance || []).filter((item) => !(item.relation === relation.relation && item.targetId === relation.targetId))];
+  return {
+    ...conversation,
+    focus,
+    context: {
+      ...conversation.context,
+      provenance,
+      metadata: {
+        ...conversation.context.metadata,
+        focus: {
+          id: focus.context?.id || focus.id,
+          title: focus.title,
+          kind: focus.context?.kind || focus.kind,
+          origin: focus.context?.origin.plane || focus.source,
+          visibility: focus.context?.authority.visibility || 'public',
+        },
+      },
+    },
+  };
+}
+
+function withSourceContext(conversation: Conversation, source: ContextCapsule): Conversation {
+  const relation = sourceRelation(source, source.id, source.kind, source.kind);
+  const provenance = [relation, ...(conversation.context.provenance || []).filter((item) => !(item.relation === relation.relation && item.targetId === relation.targetId))];
+  return {
+    ...conversation,
+    context: {
+      ...conversation.context,
+      provenance,
+      metadata: {
+        ...conversation.context.metadata,
+        sourceContext: { id: source.id, kind: source.kind, origin: source.origin.plane, visibility: source.authority.visibility },
+      },
+    },
   };
 }
 
@@ -135,18 +186,35 @@ export function ChatWorkspace() {
   useEffect(() => {
     try {
       const stored = localStorage.getItem('bitcoreos-chats');
+      let nextConversations: Conversation[] = [];
       if (stored) {
         const parsed = JSON.parse(stored);
-        const normalized = Array.isArray(parsed)
+        nextConversations = Array.isArray(parsed)
           ? parsed.map(normalizeLocalConversation).filter((item): item is Conversation => Boolean(item))
           : [];
-        if (normalized.length) {
-          setConversations(normalized);
-          setActiveId(normalized[0].id);
-        }
-      } else {
-        setActiveId((current) => current || conversations[0].id);
       }
+      if (!nextConversations.length) nextConversations = [emptyConversation()];
+
+      const focusRaw = sessionStorage.getItem('bitcoreos-context-resource');
+      const contextRaw = sessionStorage.getItem('bitcoreos-context-object');
+      let focus: Resource | null = null;
+      let sourceContext: ContextCapsule | null = null;
+      if (focusRaw) {
+        sessionStorage.removeItem('bitcoreos-context-resource');
+        const parsed = JSON.parse(focusRaw);
+        if (parsed && (parsed.source === 'hub' || parsed.source === 'wiki')) focus = parsed as Resource;
+      }
+      if (contextRaw) {
+        sessionStorage.removeItem('bitcoreos-context-object');
+        const parsed = JSON.parse(contextRaw);
+        if (parsed?.id && parsed?.origin?.substrate) sourceContext = parsed as ContextCapsule;
+      }
+      if (focus) nextConversations[0] = withFocus(nextConversations[0], focus);
+      else if (sourceContext) nextConversations[0] = withSourceContext(nextConversations[0], sourceContext);
+
+      setConversations(nextConversations);
+      setActiveId(nextConversations[0].id);
+
       const seed = sessionStorage.getItem('bitcoreos-chat-seed');
       if (seed) {
         sessionStorage.removeItem('bitcoreos-chat-seed');
@@ -162,6 +230,17 @@ export function ChatWorkspace() {
   useEffect(() => {
     try { localStorage.setItem('bitcoreos-chats', JSON.stringify(conversations.slice(-20))); } catch {}
   }, [conversations]);
+
+  useEffect(() => {
+    const viewer = remoteIndex.viewer || 'anonymous';
+    setConversations((list) => list.map((conversation) => ({
+      ...conversation,
+      context: {
+        ...conversation.context,
+        identity: { ...conversation.context.identity, viewer },
+      },
+    })));
+  }, [remoteIndex.viewer]);
 
   const activeIndex = useMemo(() => {
     const index = conversations.findIndex((conversation) => conversation.id === activeId);
@@ -185,6 +264,7 @@ export function ChatWorkspace() {
 
   function newChat() {
     const conversation = emptyConversation();
+    conversation.context.identity = { ...conversation.context.identity, viewer: remoteIndex.viewer || 'anonymous' };
     setConversations((list) => [conversation, ...list]);
     setActiveId(conversation.id);
     setActiveRemote(null);
@@ -234,19 +314,24 @@ export function ChatWorkspace() {
   function updateActiveContext(resources: Resource[], modelName: string | null, execution: string) {
     setConversations((list) => list.map((conversation) => {
       if (conversation.id !== active.id) return conversation;
-      const nextContext = localConversationContext(conversation.id, modelName);
+      const viewer = conversation.context.identity?.viewer || remoteIndex.viewer || 'anonymous';
+      const nextContext = localConversationContext(conversation.id, modelName, viewer);
+      const sourceRelations = (conversation.context.provenance || []).filter((relation) => relation.relation === 'derived-from');
+      const evidenceRelations = resources.slice(0, 16).map((resource) => ({
+        relation: 'references' as const,
+        targetId: resource.context?.id || resource.id,
+        targetKind: resource.context?.kind || resource.kind,
+        label: resource.title,
+      }));
+      const provenance = [...sourceRelations, ...evidenceRelations].filter((relation, index, rows) => rows.findIndex((candidate) => candidate.relation === relation.relation && candidate.targetId === relation.targetId) === index);
       return {
         ...conversation,
         context: {
           ...nextContext,
           state: { ...nextContext.state, execution },
-          provenance: resources.slice(0, 16).map((resource) => ({
-            relation: 'references' as const,
-            targetId: resource.context?.id || resource.id,
-            targetKind: resource.context?.kind || resource.kind,
-            label: resource.title,
-          })),
+          provenance,
           metadata: {
+            ...conversation.context.metadata,
             ...nextContext.metadata,
             evidenceCount: resources.length,
             lastUpdatedAt: new Date().toISOString(),
@@ -271,7 +356,7 @@ export function ChatWorkspace() {
       const response = await fetch('/api/ask', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ messages: next }),
+        body: JSON.stringify({ messages: next, focus: active.focus || undefined }),
       });
       const data = await response.json();
       const turnEvidence = Array.isArray(data?.evidence) ? data.evidence as Resource[] : [];
@@ -312,6 +397,7 @@ export function ChatWorkspace() {
       .join('\n\n')
       .slice(-6200);
     sessionStorage.setItem('bitcoreos-context-object', JSON.stringify(active.context));
+    if (active.focus) sessionStorage.setItem('bitcoreos-context-resource', JSON.stringify(active.focus));
     sessionStorage.setItem('bitcoreos-research-seed', `Research and distill this local Ask conversation: ${active.title}\n\n${transcript}`);
     router.push('/research');
   }
@@ -332,6 +418,7 @@ export function ChatWorkspace() {
             <button key={conversation.id} data-active={!activeRemote && conversation.id === active.id} onClick={() => selectLocal(conversation.id)}>
               <div className="conversation-row-head"><span className="conversation-kind local">LOCAL</span><small>{conversation.messages.length} msg</small></div>
               <strong>{conversation.title}</strong>
+              {conversation.focus && <span className="conversation-excerpt">focus · {conversation.focus.title}</span>}
             </button>
           ))}
           {visibleRemote.map((conversation) => (
@@ -418,6 +505,12 @@ export function ChatWorkspace() {
         {!activeRemote ? (
           <>
             <div className="mini-title">LOCAL CONTEXT // {active.context.authority.visibility.toUpperCase()}</div>
+            {active.focus && (
+              <div className="focus-object-card">
+                <span className={`source-chip ${active.focus.source}`}>{active.focus.source === 'hub' ? 'HUB' : 'WIKI'}</span>
+                <div><small>FOCUS · {active.focus.context?.authority.visibility || 'public'}</small><b>{active.focus.title}</b><span>{active.focus.context?.kind || active.focus.kind}</span></div>
+              </div>
+            )}
             <div className="evidence-summary">{evidence.length ? `${evidence.length} resources retrieved` : 'Sources appear here when this conversation retrieves them.'}</div>
             <div className="evidence-list">
               {evidence.map((resource, index) => {
@@ -432,6 +525,7 @@ export function ChatWorkspace() {
             </div>
             <details className="context-details local-context-details">
               <summary>Conversation identity + provenance</summary>
+              <ContextRow label="Viewer" value={active.context.identity?.viewer || 'anonymous'} />
               <ContextRow label="Origin" value={active.context.origin.plane} />
               <ContextRow label="Transport" value={active.context.origin.substrate} />
               <ContextRow label="Visibility" value={active.context.authority.visibility} />
@@ -447,7 +541,9 @@ export function ChatWorkspace() {
             <ContextRow label="Origin" value={remoteContext?.origin.plane || ''} />
             <ContextRow label="Transport" value={remoteContext?.origin.substrate || ''} />
             <ContextRow label="Visibility" value={remoteContext?.authority.visibility || ''} />
-            {remoteContext?.identity?.executor?.label && <ContextRow label="Identity" value={remoteContext.identity.executor.label} />}
+            {remoteContext?.identity?.viewer && <ContextRow label="Viewer" value={remoteContext.identity.viewer} />}
+            {remoteContext?.identity?.author && <ContextRow label="Author" value={`@${remoteContext.identity.author}`} />}
+            {remoteContext?.identity?.executor?.label && <ContextRow label="Executor" value={remoteContext.identity.executor.label} />}
             {remoteContext?.identity?.participants?.length ? <ContextRow label="Participants" value={remoteContext.identity.participants.join(', ')} /> : null}
             <details className="context-details">
               <summary>Capabilities + provenance</summary>
