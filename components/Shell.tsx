@@ -38,7 +38,7 @@ export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
 
   async function refreshAuth() {
     try {
-      const response = await fetch('/api/auth/me', { credentials: 'include' });
+      const response = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
       if (response.ok) setAuth(await response.json());
     } catch {}
   }
@@ -67,9 +67,11 @@ export function Shell({ initialView = 'cockpit' }: { initialView?: View }) {
           ))}
           <div className="os-tab-spacer" />
           <button className="identity-button" data-active={initialView === 'my'} onClick={() => router.push('/my')}>
-            {auth.user ? `@${auth.user.username}` : 'My BIThub'}
+            {auth.user ? `@${auth.user.username}` : 'Anonymous'}
           </button>
-          {auth.user && <button onClick={logout}>Out</button>}
+          {auth.user
+            ? <button onClick={logout}>Out</button>
+            : <a className="tab-signin" href="/api/auth/login">Sign in</a>}
         </nav>
 
         <div className="os-content">
