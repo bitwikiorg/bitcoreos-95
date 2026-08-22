@@ -2,18 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SESSION_COOKIE, verifySession } from '@/lib/session';
 import { USER_API_KEY_COOKIE, readDelegatedCredential } from '@/lib/delegated';
 import { readDelegatedConversation, type ConversationKind } from '@/lib/conversations';
+import { readPublicCoreConversation } from '@/lib/public-conversations';
 
 const KINDS = new Set<ConversationKind>(['pm', 'construct', 'chat-dm', 'chat-channel', 'chat-thread', 'topic', 'core-run', 'node-run', 'mas']);
 
 export async function GET(request: NextRequest) {
-  const user = verifySession(request.cookies.get(SESSION_COOKIE)?.value);
-  if (!user) return NextResponse.json({ error: 'sign_in_required' }, { status: 401 });
-
-  const credential = readDelegatedCredential(request.cookies.get(USER_API_KEY_COOKIE)?.value);
-  if (!credential || credential.username !== user.username) {
-    return NextResponse.json({ error: 'conversation_access_required' }, { status: 403 });
-  }
-
   const kind = request.nextUrl.searchParams.get('kind') as ConversationKind | null;
   const id = Number(request.nextUrl.searchParams.get('id'));
   const channelIdRaw = request.nextUrl.searchParams.get('channelId');
@@ -24,6 +17,22 @@ export async function GET(request: NextRequest) {
   }
   if (channelId !== undefined && (!Number.isInteger(channelId) || channelId <= 0)) {
     return NextResponse.json({ error: 'invalid_channel_ref' }, { status: 400 });
+  }
+
+  if (kind === 'core-run') {
+    try {
+      return NextResponse.json(await readPublicCoreConversation(id));
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'core_run_read_failed' }, { status: 502 });
+    }
+  }
+
+  const user = verifySession(request.cookies.get(SESSION_COOKIE)?.value);
+  if (!user) return NextResponse.json({ error: 'sign_in_required' }, { status: 401 });
+
+  const credential = readDelegatedCredential(request.cookies.get(USER_API_KEY_COOKIE)?.value);
+  if (!credential || credential.username !== user.username) {
+    return NextResponse.json({ error: 'conversation_access_required' }, { status: 403 });
   }
 
   try {
