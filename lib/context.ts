@@ -6,12 +6,14 @@ export type ObjectAuthority = {
   scopes?: string[];
 };
 
+export type ActorKind = 'human' | 'construct' | 'core' | 'node' | 'agent' | 'mas' | 'persona' | 'provider' | 'model' | 'system' | 'unknown';
+
 export type ObjectIdentity = {
   viewer?: string;
   author?: string;
   participants?: string[];
   executor?: {
-    kind: 'human' | 'construct' | 'core' | 'node' | 'agent' | 'mas' | 'model' | 'system' | 'unknown';
+    kind: ActorKind;
     id?: string;
     label?: string;
   };
