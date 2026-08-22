@@ -11,6 +11,8 @@ type HubOverview = { latest?: any[]; categories?: any[] };
 type WikiOverview = { recent?: any[]; categories?: any[] };
 type ActorData = { registryUrl?: string; resources?: Resource[] };
 type SpaceState = null | { id: number; slug: string; label: string; name: string; description?: string; url?: string };
+type WikiStructureKind = 'categories' | 'templates' | 'modules' | 'properties';
+type WikiSpaceState = null | { kind: WikiStructureKind; label: string; description: string; glyph: string };
 type MineState = { viewer: string | null; delegated: boolean; resources: Resource[]; loading: boolean; error?: string };
 
 const SPACE_DEFS = [
@@ -23,6 +25,13 @@ const SPACE_DEFS = [
   { label: 'Feeds', category: 'Feeds', glyph: '≈' },
   { label: 'BITCOREOS', category: 'BITCOREOS', glyph: '⊙' },
 ] as const;
+
+const WIKI_STRUCTURE_DEFS: Array<NonNullable<WikiSpaceState>> = [
+  { kind: 'categories', label: 'Categories', glyph: '⌗', description: 'Durable classification and navigation objects.' },
+  { kind: 'templates', label: 'Templates', glyph: '▧', description: 'Reusable page structure and presentation primitives.' },
+  { kind: 'modules', label: 'Lua Modules', glyph: 'λ', description: 'Computed semantic presentation and transformation code.' },
+  { kind: 'properties', label: 'Properties', glyph: '◇', description: 'Semantic predicates and relationship definitions.' },
+];
 
 function compactDate(value?: string) {
   if (!value) return '';
@@ -38,6 +47,15 @@ function resourceDate(resource: Resource) {
     || resource.metadata?.grantedAt
     || '',
   );
+}
+
+function researchIntentFor(resource: Resource) {
+  if (resource.kind === 'category') return 'category';
+  if (resource.kind === 'property' || resource.kind === 'semantic-subject') return 'semantic-model';
+  if (resource.kind === 'lua-module') return 'lua-projection';
+  if (resource.kind === 'artifact') return 'artifact';
+  if (resource.source === 'wiki') return 'revise-page';
+  return null;
 }
 
 export function Explorer() {
@@ -58,6 +76,9 @@ export function Explorer() {
   const [activeSpace, setActiveSpace] = useState<SpaceState>(null);
   const [spaceResources, setSpaceResources] = useState<Resource[]>([]);
   const [spaceLoading, setSpaceLoading] = useState(false);
+  const [activeWikiSpace, setActiveWikiSpace] = useState<WikiSpaceState>(null);
+  const [wikiSpaceResources, setWikiSpaceResources] = useState<Resource[]>([]);
+  const [wikiSpaceLoading, setWikiSpaceLoading] = useState(false);
 
   useEffect(() => {
     const seed = sessionStorage.getItem('bitcoreos-search-seed');
@@ -146,6 +167,8 @@ export function Explorer() {
       if (space?.url) window.open(space.url, '_blank', 'noopener,noreferrer');
       return;
     }
+    setActiveWikiSpace(null);
+    setWikiSpaceResources([]);
     setSpaceLoading(true);
     setSelected(null);
     setSpaceResources([]);
@@ -158,6 +181,20 @@ export function Explorer() {
         setActiveSpace((current) => current ? { ...current, name: payload?.category?.name || current.name, description: payload?.category?.description || current.description, url: payload?.category?.url || current.url } : current);
       }
     } finally { setSpaceLoading(false); }
+  }
+
+  async function openWikiSpace(space: NonNullable<WikiSpaceState>) {
+    setActiveSpace(null);
+    setSpaceResources([]);
+    setSelected(null);
+    setActiveWikiSpace(space);
+    setWikiSpaceResources([]);
+    setWikiSpaceLoading(true);
+    try {
+      const response = await fetch(`/api/wiki/directory?kind=${encodeURIComponent(space.kind)}`);
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok) setWikiSpaceResources(Array.isArray(payload?.resources) ? payload.resources : []);
+    } finally { setWikiSpaceLoading(false); }
   }
 
   function submit(event: FormEvent) { event.preventDefault(); void search(); }
@@ -202,6 +239,9 @@ export function Explorer() {
     if (selected.context) sessionStorage.setItem('bitcoreos-context-object', JSON.stringify(selected.context));
     if (target === 'research') {
       sessionStorage.setItem('bitcoreos-research-seed', `Research and reconcile this ${selected.context?.kind || selected.kind}: ${selected.title}`);
+      const intent = researchIntentFor(selected);
+      if (intent) sessionStorage.setItem('bitcoreos-research-intent', intent);
+      else sessionStorage.removeItem('bitcoreos-research-intent');
       if (selected.source === 'wiki') sessionStorage.setItem('bitcoreos-research-target', selected.title);
       else sessionStorage.removeItem('bitcoreos-research-target');
       router.push('/research');
@@ -256,9 +296,9 @@ export function Explorer() {
           </>
         )}
 
-        {mode === 'spaces' && !activeSpace && (
+        {mode === 'spaces' && !activeSpace && !activeWikiSpace && (
           <div className="space-directory sunken">
-            <div className="explorer-empty space-intro"><b>Spaces</b><span>Curated entry points over actual discussion and workflow categories.</span></div>
+            <div className="explorer-empty space-intro"><b>Live spaces</b><span>Discussion, workflow, artifact, feed, and community structures.</span></div>
             <div className="space-grid">
               {spaces.map((space) => (
                 <article className="space-card" key={space.label}>
@@ -268,6 +308,16 @@ export function Explorer() {
                     <button onClick={() => void openSpace(space)}>Explore</button>
                     {space.url && <a href={space.url} target="_blank" rel="noreferrer">Source ↗</a>}
                   </div>
+                </article>
+              ))}
+            </div>
+            <div className="structure-section-label"><b>Knowledge structures</b><span>Durable classification, reusable code, and semantic schema.</span></div>
+            <div className="space-grid structure-grid">
+              {WIKI_STRUCTURE_DEFS.map((space) => (
+                <article className="space-card knowledge-space-card" key={space.kind}>
+                  <div className="space-card-head"><span>{space.glyph}</span><strong>{space.label}</strong><small>WIKI</small></div>
+                  <p>{space.description}</p>
+                  <div className="space-card-actions"><button onClick={() => void openWikiSpace(space)}>Explore</button></div>
                 </article>
               ))}
             </div>
@@ -290,7 +340,27 @@ export function Explorer() {
                   <small>{compactDate(resourceDate(resource))}</small>
                 </button>
               ))}
-              {!spaceLoading && !spaceResources.length && <div className="quiet-empty">No public topics returned for this space.</div>}
+              {!spaceLoading && !spaceResources.length && <div className="quiet-empty">No public objects returned for this space.</div>}
+            </div>
+          </div>
+        )}
+
+        {mode === 'spaces' && activeWikiSpace && (
+          <div className="space-stream">
+            <div className="space-stream-head">
+              <button onClick={() => { setActiveWikiSpace(null); setWikiSpaceResources([]); setSelected(null); }}>← Spaces</button>
+              <div><b>{activeWikiSpace.label}</b><span>{activeWikiSpace.description}</span></div>
+            </div>
+            <div className="resource-list sunken relaxed-list">
+              {wikiSpaceLoading && <div className="quiet-empty">Reading {activeWikiSpace.label}…</div>}
+              {!wikiSpaceLoading && wikiSpaceResources.map((resource) => (
+                <button key={resource.id} className="resource-row relaxed-row" data-selected={selected?.id === resource.id} onClick={() => setSelected(resource)}>
+                  <span className="source-chip wiki">WIKI</span>
+                  <div><strong>{resource.title}</strong><p>{resource.excerpt || resource.context?.kind || resource.kind}</p></div>
+                  <small>{resource.kind}</small>
+                </button>
+              ))}
+              {!wikiSpaceLoading && !wikiSpaceResources.length && <div className="quiet-empty">No deployed {activeWikiSpace.label.toLowerCase()} returned.</div>}
             </div>
           </div>
         )}
