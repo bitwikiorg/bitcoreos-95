@@ -2,134 +2,110 @@
 
 Updated: 2026-08-21
 
-## Completed — M1 Resource hydration + readers
+## Completed foundations
 
-- [x] Add normalized hydrated-resource types.
-- [x] Add BIThub topic hydration using public Discourse topic/post APIs.
-- [x] Add BITwiki page hydration using MediaWiki Action API.
-- [x] Add `/api/resource` hydration endpoint.
-- [x] Make Explorer hydrate selected resources internally.
-- [x] Make Ask ground from bounded hydrated source content.
-- [x] Make Research use bounded hydrated source content.
-- [x] Verify live Hub/Wiki hydration.
+- [x] Federated BIThub + BITwiki search.
+- [x] BIThub topic/post hydration.
+- [x] BITwiki page hydration.
+- [x] Internal source reader.
+- [x] Grounded Ask evidence.
+- [x] Research evidence/preflight.
+- [x] Anonymous state + BIThub SSO initiation.
+- [x] Scoped Discourse User API Key handshake implementation.
+- [x] Notifications/bookmarks/tracking/watching adapters.
+- [x] B8 agent registry projection.
+- [x] SMW subject traversal.
+- [x] Requested Knowledge Cargo-first adapter with source fallback.
+- [x] Guarded n8n action-envelope implementation.
 
-## M2 — Identity + personal BIThub
+## Active — unified object model
 
-Implemented:
+- [ ] Add one normalized recursive context/object envelope used by Ask, Research, Explore, identity projections, and Graph.
+- [ ] Add explicit origin, substrate, actor/participants, authority, visibility, provenance, state, and capabilities to normalized objects.
+- [ ] Support parent/derived/produced/canonicalized relationships without inventing duplicate canonical state.
+- [ ] Make object capability rendering depend on current viewer authority.
 
-- [x] Configure production `DISCOURSE_SSO_SECRET`.
-- [x] Production auth reports configured.
-- [x] Anonymous UI explicitly renders Anonymous / public-read state.
-- [x] Add Sign in with BIThub actions.
-- [x] Verify `/api/auth/login` redirects to BIThub DiscourseConnect provider.
-- [x] Use canonical production callback URL.
-- [x] Implement signed local BIThub identity session.
-- [x] Implement scoped Discourse User API Key handshake.
-- [x] Use RSA/OAEP for delegated key exchange.
-- [x] Encrypt delegated credential cookies.
-- [x] Add notifications projection.
-- [x] Add bookmarks/tracking/watching projection.
-- [x] Add public contribution trail and real contribution indicators.
-- [x] Add provisional same-username MediaWiki User: namespace/contribution view.
-- [x] Keep public identity separate from delegated authority.
-- [x] Do not use a master admin key as the generic user authority path.
+## Active — Ask as universal conversation mode
 
-Verification remaining:
+- [ ] Keep local grounded Ask as one conversation substrate, not the definition of Ask.
+- [ ] Add delegated Discourse PM conversation list.
+- [ ] Add PM topic/post hydration and reply trail.
+- [ ] Detect native Discourse Chat availability on BIThub.
+- [ ] Add delegated Chat channel list.
+- [ ] Add Chat direct-message channels.
+- [ ] Add Chat messages.
+- [ ] Add Chat threads.
+- [ ] Add Chat read/unread state, drafts, pins, and reactions where useful.
+- [ ] Render PM, Chat, CORE activation, Construct conversation, Node interaction, and local session through one conversation UI with explicit substrate badges.
+- [ ] Add conversation filters: All / Unread / PM / Chat / CORE / Constructs / Nodes / Local.
+- [ ] Make conversation writes route through the correct authority path; sensitive mutations remain guarded by n8n by default.
 
-- [ ] Complete one real BIThub DiscourseConnect login/callback in a browser.
-- [ ] Verify signed-in `/my` profile against that real session.
-- [ ] Complete one real User API Key approval/callback.
-- [ ] Verify Saved + inbox against real delegated state.
+## Active — CORE semantics correction
 
-## Completed — M3 Agent capability projection
+- [ ] Stop treating the Discourse Cores category as the semantic CORE object.
+- [ ] Model CORE definition separately from CORE activation.
+- [ ] Represent activation topic/post/reply trail as conversation objects with `substrate=core_activation`.
+- [ ] Link activation -> CORE -> executor -> outputs/artifacts.
+- [ ] Keep the Cores category only as a discovery/catalog projection where useful.
+- [ ] Allow CORE selection from Ask and Research when the current authority permits activation.
 
-- [x] Read the public agent registry used by `agent.b8-plugin`.
-- [x] Parse the live registry into typed agent resources.
-- [x] Surface agents in Explore.
-- [x] Reuse canonical B8 read/write capability names.
-- [x] Distinguish registry identities from actual Discourse user accounts.
+## Active — identity/Mine refactor
 
-## M4 — Canonical Research state
+- [ ] Keep current identity persistently visible in shell chrome.
+- [ ] Replace conceptual "My BIThub" product split with identity/Mine projections.
+- [ ] Ask → My conversations, unread, bots, CORE activations, local sessions.
+- [ ] Research → My requests, executions, reviews, outputs.
+- [ ] Explore → My topics/posts, saved/watched, notifications, badges, wiki contributions, user namespace.
+- [ ] Preserve a compact identity/profile drawer for denser organization without duplicating the three modes.
+- [ ] Verify one successful DiscourseConnect callback after provider-domain correction.
+- [ ] Verify one User API Key approval/callback.
+- [ ] Later unify verified BIThub identity with BITwiki User: namespace ownership.
 
-Implemented:
+## Active — Explore refactor
 
-- [x] Add research intent taxonomy for new page, revision, category/navigation, semantic model, Lua projection, reusable artifact, and coverage audit.
-- [x] Add exact-page and overlapping-request preflight.
-- [x] Separate knowledge lifecycle from execution lifecycle.
-- [x] Attempt live Cargo `Knowledge_requests` first.
-- [x] Fall back transparently to canonical `wiki-content` Requested Knowledge state when live Cargo fails.
-- [x] Expose actual request-state source in the UI.
-- [x] Include current target SMW facts in preflight when available.
+- [ ] Treat Hub/Wiki as origin filters/facets, not competing top-level systems.
+- [ ] Browse topics, posts, PMs where authorized, users, groups, categories, tags, agents, Nodes, CORE definitions/activations, artifacts, workspaces, feeds, markets.
+- [ ] Browse Wiki pages, revisions, categories, templates, Lua modules, SMW subjects/Properties/assertions, Cargo records, user namespaces/contributions.
+- [ ] Browse runtime objects: research requests, workflow runs, evidence packets, local MAS sessions, n8n job status.
+- [ ] Keep Feed and Search cognitively simple.
+- [ ] Keep Graph secondary and drive it from the same normalized object/provenance relations.
 
-Infrastructure remaining:
+## Active — Research generalized inputs/outputs
 
-- [ ] Repair/deploy live Cargo `Knowledge_requests` table so Cargo can become runtime request-state authority.
-- [ ] Verify lifecycle transitions against live Cargo after repair.
+- [ ] Accept any normalized object as Research source context.
+- [ ] Support conversation → research request.
+- [ ] Support CORE/Construct/Node/local-MAS output → research request.
+- [ ] Support page/category/SMW Property/Lua/template/artifact as research targets.
+- [ ] Decide whether intent requires new page, revision, category/nav, semantic schema/assertion, Lua projection, reusable artifact, request set, provenance repair, or no new durable object.
+- [ ] Keep knowledge lifecycle separate from execution lifecycle.
 
-## Completed application layer — M5 n8n broker
-
-- [x] Define typed action envelope.
-- [x] Add correlation IDs and idempotency keys.
-- [x] Add HMAC-signed n8n request contract.
-- [x] Add server-side risk classification and allowlisted action vocabulary.
-- [x] Keep sensitive/multi-system execution behind the broker.
-
-Infrastructure remaining:
+## Infrastructure gates
 
 - [ ] Configure `N8N_ACTION_URL`.
 - [ ] Configure `N8N_ACTION_SECRET`.
-- [ ] Verify one guarded action round trip.
-- [ ] Add/verify action-status reconciliation or callback once the real workflow endpoint is connected.
+- [ ] Verify one guarded n8n action round trip.
+- [ ] Repair/deploy live Cargo `Knowledge_requests`.
+- [ ] Verify Cargo lifecycle transitions after repair.
 
-## Explore / navigation
+## Next — real Deploy Research
 
-- [x] Keep Feed and Search simple.
-- [x] Add curated Spaces for Discussions, Nodes, Cores, Markets, Artifacts, Workspaces, Feeds, BITCOREOS.
-- [x] Back Spaces with the real Discourse categories rather than duplicate state.
-- [x] Add native category-stream adapter.
-- [x] Open real category topics internally in Explore.
-- [x] Keep Graph secondary to Ask / Research / Explore.
-- [x] Add live SMW subject relations to BITwiki readers and Graph traversal.
-- [ ] Continue replacing broad category topology with meaningful real cross-system semantic/provenance relations as those relations become authoritative.
-
-## Personal workspace
-
-- [x] Anonymous state.
-- [x] BIThub sign-in entry point.
-- [x] Public contribution trail.
-- [x] Real metrics/contribution mix without invented XP.
-- [x] Matching BITwiki User: namespace/contributions with explicit provisional identity semantics.
-- [x] Saved work: bookmarks/tracking/watching.
-- [x] Inbox: notifications.
-- [ ] Add research requests/work trails to the personal projection once request ownership/provenance is authoritative.
-- [ ] Add more game-like organization only when it reflects real participation/state; do not invent meaningless points.
-
-## Next — M6 Real Deploy Research
-
-- [ ] Connect guarded `research.deploy` to the real n8n workflow.
-- [ ] Create/update the authoritative Requested Knowledge record.
-- [ ] Create or attach a BIThub work trail.
-- [ ] Select/dispatch B8-compatible agents or workflows.
-- [ ] Observe execution state separately from knowledge lifecycle.
+- [ ] Connect `research.deploy` to the real n8n workflow.
+- [ ] Create/update authoritative Requested Knowledge state.
+- [ ] Create or attach the appropriate Hub work/conversation trail.
+- [ ] Select/dispatch B8-compatible agents, COREs, Nodes, or local/runtime executors.
+- [ ] Observe execution state.
 - [ ] Collect evidence/artifacts.
 - [ ] Produce reviewable source-controlled BITwiki candidate changes.
-- [ ] Preserve provenance from request -> work -> agent -> evidence -> candidate -> canonical page.
+- [ ] Preserve provenance request -> conversation/work -> executor -> evidence -> artifact -> candidate -> canonical page.
 
-## Later — identity and provenance
+## UI rules
 
-- [ ] Choose the verified BIThub ↔ BITwiki identity bridge.
-- [ ] Treat MediaWiki `User:` namespaces as authenticated user-owned surfaces only after that bridge exists.
-- [ ] Add first-class cross-system provenance objects/relations.
-- [ ] Add source-controlled BITwiki candidate publication workflow.
-
-## Repository/UI rules
-
-- Active development stays on `main`.
-- Create branches only as intentional rollback/archive boundaries, never routine feature branches.
-- Preserve the sparse lander.
-- Ask / Research / Explore are first-class.
-- Prefer progressive disclosure over information dashboards.
+- Ask / Research / Explore are first-class verbs.
+- Identity is global context; Mine is a filter.
+- Every object exposes origin, identity, authority, provenance.
+- Front page remains sparse.
+- Progressive disclosure over dashboards.
 - No command palette.
-- No fake UI controls.
+- No fake controls.
 - No developer/configuration metalanguage on public surfaces.
-- Backend capability work should not automatically increase homepage complexity.
+- Real Discourse badges/gamification/activity may be surfaced; do not invent meaningless XP.
