@@ -1,9 +1,10 @@
 import type { Resource, SearchResponse, SourceHealth } from './resources';
+import type { ContextCapsule } from './context';
 import { publicHubTopicContext, publicWikiPageContext } from './context';
 
 export const HUB = 'https://hub.bitwiki.org';
 export const WIKI = 'https://bitwiki.org';
-const WIKI_UA = { 'user-agent': 'BITCOREOS-95/0.2 (+https://bitwiki.org)' };
+const WIKI_UA = { 'user-agent': 'BITCOREOS-95/0.6 (+https://bitwiki.org)' };
 
 export function stripHtml(value = '') {
   return value
@@ -37,6 +38,140 @@ async function fetchJson(url: URL | string, init?: RequestInit) {
   return response.json();
 }
 
+function simpleHubContext(input: {
+  id: string;
+  kind: string;
+  substrate: string;
+  canonicalRef: string;
+  url: string;
+  subject?: ContextCapsule['identity'] extends infer I ? any : never;
+  metadata?: Record<string, unknown>;
+  capabilities?: string[];
+}): ContextCapsule {
+  return {
+    id: input.id,
+    kind: input.kind,
+    origin: {
+      plane: 'hub',
+      substrate: input.substrate,
+      canonicalRef: input.canonicalRef,
+      url: input.url,
+    },
+    identity: input.subject ? { subject: input.subject } : undefined,
+    authority: { visibility: 'public', mode: 'public-read' },
+    capabilities: input.capabilities || ['read', 'ask', 'research'],
+    metadata: input.metadata,
+  };
+}
+
+function userResource(user: any): Resource | null {
+  const username = String(user?.username || '').trim();
+  if (!username) return null;
+  const url = `${HUB}/u/${encodeURIComponent(username)}`;
+  const label = String(user?.name || '').trim();
+  const context = simpleHubContext({
+    id: `user:${username}`,
+    kind: 'User identity',
+    substrate: 'Discourse user profile',
+    canonicalRef: `discourse:user:${username}`,
+    url,
+    subject: { kind: 'human', id: `discourse-user:${username}`, label: `@${username}` },
+    capabilities: ['read', 'ask', 'research', 'explore-activity'],
+    metadata: { username },
+  });
+  return {
+    id: `hub:user:${username}`,
+    source: 'hub',
+    kind: 'user',
+    title: label || `@${username}`,
+    excerpt: label ? `@${username}` : 'Discourse user profile',
+    url,
+    metadata: { username, name: label || undefined },
+    context,
+  };
+}
+
+function categoryResource(category: any): Resource | null {
+  const id = Number(category?.id);
+  const slug = String(category?.slug || '').trim();
+  const name = String(category?.name || '').trim();
+  if (!Number.isInteger(id) || id <= 0 || !slug || !name) return null;
+  const url = `${HUB}/c/${encodeURIComponent(slug)}/${id}`;
+  return {
+    id: `hub:category:${id}`,
+    source: 'hub',
+    kind: 'category',
+    title: name,
+    excerpt: stripHtml(String(category?.description_text || category?.description || '')) || 'Discussion category',
+    url,
+    metadata: { categoryId: id, slug, topicCount: category?.topic_count },
+    context: simpleHubContext({
+      id: `category:${id}`,
+      kind: 'Discussion category',
+      substrate: 'Discourse category',
+      canonicalRef: `discourse:category:${id}`,
+      url,
+      capabilities: ['read', 'ask', 'research', 'explore-topics'],
+      metadata: { categoryId: id, slug },
+    }),
+  };
+}
+
+function tagResource(tag: any): Resource | null {
+  const raw = typeof tag === 'string' ? tag : tag?.name || tag?.text || tag?.slug;
+  const name = String(raw || '').replace(/^#/, '').trim();
+  if (!name) return null;
+  const slug = String((typeof tag === 'object' && tag?.slug) || name).trim();
+  const url = `${HUB}/tag/${encodeURIComponent(slug)}`;
+  return {
+    id: `hub:tag:${slug}`,
+    source: 'hub',
+    kind: 'tag',
+    title: `#${name}`,
+    excerpt: typeof tag === 'object' && Number.isFinite(Number(tag?.count)) ? `${Number(tag.count)} tagged topics` : 'Topic tag',
+    url,
+    metadata: { tag: name, slug, count: typeof tag === 'object' ? tag?.count : undefined },
+    context: simpleHubContext({
+      id: `tag:${slug}`,
+      kind: 'Tag',
+      substrate: 'Discourse tag',
+      canonicalRef: `discourse:tag:${slug}`,
+      url,
+      capabilities: ['read', 'ask', 'research', 'explore-topics'],
+      metadata: { tag: name, slug },
+    }),
+  };
+}
+
+function groupResource(group: any): Resource | null {
+  const name = String(group?.name || '').trim();
+  if (!name) return null;
+  const url = `${HUB}/g/${encodeURIComponent(name)}`;
+  const fullName = String(group?.full_name || '').trim();
+  return {
+    id: `hub:group:${name}`,
+    source: 'hub',
+    kind: 'group',
+    title: fullName || name,
+    excerpt: fullName ? `${name} · ${Number(group?.user_count || 0)} members` : `${Number(group?.user_count || 0)} members`,
+    url,
+    metadata: { groupId: group?.id, name, fullName: fullName || undefined, userCount: group?.user_count },
+    context: simpleHubContext({
+      id: `group:${name}`,
+      kind: 'Group',
+      substrate: 'Discourse group',
+      canonicalRef: `discourse:group:${name}`,
+      url,
+      capabilities: ['read', 'ask', 'research', 'explore-members'],
+      metadata: { groupId: group?.id, name },
+    }),
+  };
+}
+
+function dedupe(resources: Resource[], limit: number) {
+  return Array.from(new Map(resources.map((resource) => [resource.id, resource])).values()).slice(0, limit);
+}
+
 export async function searchHub(query: string, limit = 12): Promise<Resource[]> {
   const url = new URL('/search.json', HUB);
   url.searchParams.set('q', query);
@@ -49,24 +184,22 @@ export async function searchHub(query: string, limit = 12): Promise<Resource[]> 
     if (topicId && !bestPostByTopic.has(topicId)) bestPostByTopic.set(topicId, post);
   }
 
-  return topics.slice(0, limit).map((topic: any) => {
+  const topicResources: Resource[] = topics.map((topic: any) => {
     const topicId = Number(topic.id);
     const hit = bestPostByTopic.get(topicId);
     const topicUrl = `${HUB}/t/${topic.slug}/${topicId}`;
     return {
       id: `hub:${topicId}`,
-      source: 'hub' as const,
-      kind: 'topic' as const,
+      source: 'hub',
+      kind: 'topic',
       title: topic.title ?? 'Untitled topic',
       excerpt: stripHtml(hit?.blurb ?? topic.blurb ?? ''),
       url: topicUrl,
       tags: Array.isArray(topic.tags) ? topic.tags : [],
-      author: hit?.username,
       score: Number(topic.posts_count ?? 0),
       context: publicHubTopicContext({
         topicId,
         url: topicUrl,
-        author: hit?.username,
         categoryId: Number(topic.category_id) || undefined,
       }),
       metadata: {
@@ -75,10 +208,27 @@ export async function searchHub(query: string, limit = 12): Promise<Resource[]> 
         posts: topic.posts_count,
         views: topic.views,
         lastPostedAt: topic.last_posted_at,
+        matchedPostId: hit?.id,
         matchedPostNumber: hit?.post_number,
+        matchedPostAuthor: hit?.username,
       },
     };
   });
+
+  const entityResources = [
+    ...(Array.isArray(data?.users) ? data.users.map(userResource) : []),
+    ...(Array.isArray(data?.categories) ? data.categories.map(categoryResource) : []),
+    ...(Array.isArray(data?.tags) ? data.tags.map(tagResource) : []),
+    ...(Array.isArray(data?.groups) ? data.groups.map(groupResource) : []),
+  ].filter((resource): resource is Resource => Boolean(resource));
+
+  const reserve = Math.min(Math.max(0, Math.floor(limit / 3)), entityResources.length);
+  const topicSlots = Math.max(0, limit - reserve);
+  return dedupe([
+    ...topicResources.slice(0, topicSlots),
+    ...entityResources,
+    ...topicResources.slice(topicSlots),
+  ], limit);
 }
 
 async function wikiAction(params: Record<string, string>) {
@@ -117,10 +267,6 @@ function wikiResource(page: any, mode: string): Resource {
       searchMode: mode,
     },
   };
-}
-
-function dedupe(resources: Resource[], limit: number) {
-  return Array.from(new Map(resources.map((resource) => [resource.id, resource])).values()).slice(0, limit);
 }
 
 export async function searchWiki(query: string, limit = 12): Promise<Resource[]> {
