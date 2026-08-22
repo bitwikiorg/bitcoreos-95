@@ -8,7 +8,7 @@ type Personal = {
   profile: { name?: string; avatarTemplate?: string; trustLevel: number; topicCount: number; postCount: number; likesReceived: number; likesGiven: number; daysVisited: number };
   hub: { topics: any[]; posts: any[] };
   wiki: { namespace: { exists: boolean; title: string; url: string }; contributions: any[] };
-  delegated: { connected: boolean; scopes: string[]; notifications: any[]; bookmarks?: any[]; tracking?: any[]; watching?: any[] };
+  delegated: { connected: boolean; scopes: string[]; notifications: any[]; saved: any[] };
 };
 
 type Tab = 'trail' | 'wiki' | 'inbox';
@@ -81,7 +81,7 @@ export function PersonalSpace() {
           </div>
           <div className="anonymous-capabilities">
             <div><b>Available now</b><span>Public search, source reading, Ask, Research, feeds, spaces, agents, and knowledge graph.</span></div>
-            <div><b>After BIThub sign-in</b><span>Your topics, replies, contribution trail, BITwiki identity projection, and user-scoped state.</span></div>
+            <div><b>After BIThub sign-in</b><span>Your topics, replies, contribution trail, BITwiki identity projection, saved work, and user-scoped state.</span></div>
           </div>
         </section>
       </div>
@@ -93,6 +93,7 @@ export function PersonalSpace() {
   const avatar = avatarUrl(data.profile.avatarTemplate) || auth.user.avatarUrl || '';
   const mix = { topics: data.hub.topics.length, replies: data.hub.posts.length, wiki: data.wiki.contributions.length };
   const mixTotal = Math.max(1, mix.topics + mix.replies + mix.wiki);
+  const saved = Array.isArray(data.delegated.saved) ? data.delegated.saved : [];
 
   return (
     <div className="personal-space">
@@ -156,19 +157,35 @@ export function PersonalSpace() {
         )}
 
         {tab === 'inbox' && (
-          <div className="inbox-view">
+          <div className="private-workspace">
             <div className="delegated-card">
               <div className="mini-title">PRIVATE BITHUB STATE</div>
               {data.delegated.connected ? (
-                <><h2>Connected as @{data.username}</h2><p>Scoped BIThub access is active for this session.</p><button onClick={disconnect}>Disconnect</button></>
+                <div className="delegated-status"><div><h2>Connected as @{data.username}</h2><p>Saved work and notifications are projected from your scoped BIThub access.</p></div><button onClick={disconnect}>Disconnect</button></div>
               ) : (
-                <><h2>Public identity connected</h2><p>Connect private state to bring saved topics, tracking, watching, and notifications into this workspace.</p><a className="spectral-button inline-action" href="/api/auth/user-key/start">Connect private state</a></>
+                <><h2>Public identity connected</h2><p>Connect private state to bring bookmarks, tracking, watching, and notifications into this workspace.</p><a className="spectral-button inline-action" href="/api/auth/user-key/start">Connect private state</a></>
               )}
             </div>
-            <div className="notification-list">
-              {data.delegated.notifications.map((item) => <div className="notification-row" key={item.id}><b>{item.read ? 'read' : 'new'}</b><span>{item.data?.topic_title || item.data?.display_username || `Notification ${item.id}`}</span><small>{item.createdAt ? new Date(item.createdAt).toLocaleString() : ''}</small></div>)}
-              {data.delegated.connected && !data.delegated.notifications.length && <div className="quiet-empty">No recent notifications.</div>}
-            </div>
+
+            {data.delegated.connected && (
+              <div className="private-columns">
+                <section>
+                  <div className="personal-section-head"><div><b>Saved work</b><span>Bookmarks, tracked topics, and watched topics.</span></div><small>{saved.length}</small></div>
+                  <div className="saved-topic-list">
+                    {saved.slice(0, 24).map((item) => <a className="saved-topic-row" href={item.url} target="_blank" rel="noreferrer" key={`${item.state}-${item.id}`}><span className={`saved-state ${item.state}`}>{item.state}</span><div><strong>{item.title}</strong><small>{item.posts || 0} posts · {item.views || 0} views</small></div></a>)}
+                    {!saved.length && <div className="quiet-empty">No bookmarked, tracked, or watched topics returned.</div>}
+                  </div>
+                </section>
+
+                <section>
+                  <div className="personal-section-head"><div><b>Inbox</b><span>Recent BIThub notifications.</span></div><small>{data.delegated.notifications.length}</small></div>
+                  <div className="notification-list">
+                    {data.delegated.notifications.map((item) => <div className="notification-row" key={item.id}><b>{item.read ? 'read' : 'new'}</b><span>{item.data?.topic_title || item.data?.display_username || `Notification ${item.id}`}</span><small>{item.createdAt ? new Date(item.createdAt).toLocaleString() : ''}</small></div>)}
+                    {!data.delegated.notifications.length && <div className="quiet-empty">No recent notifications.</div>}
+                  </div>
+                </section>
+              </div>
+            )}
           </div>
         )}
       </section>
