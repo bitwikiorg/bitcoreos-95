@@ -199,6 +199,99 @@
   white-space: nowrap;
 }
 
+.private-workspace {
+  display: grid;
+  gap: 10px;
+}
+
+.delegated-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.delegated-status h2,
+.delegated-status p {
+  margin: 0;
+}
+
+.private-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr);
+  gap: 12px;
+}
+
+.private-columns > section {
+  min-width: 0;
+}
+
+.saved-topic-list {
+  border: 1px solid #aaa49a;
+  background: #faf7ef;
+  max-height: 430px;
+  overflow: auto;
+}
+
+.saved-topic-row {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid #d2cbc0;
+}
+
+.saved-topic-row:hover {
+  background: #fff;
+}
+
+.saved-topic-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.saved-topic-row strong {
+  line-height: 1.25;
+}
+
+.saved-topic-row small {
+  color: #716a61;
+  font-size: 9px;
+}
+
+.saved-state {
+  align-self: start;
+  padding: 2px 4px;
+  border: 1px solid #777;
+  background: #ece6dc;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.saved-state.bookmark {
+  border-left: 3px solid #111;
+}
+
+.saved-state.tracking {
+  border-left: 3px solid #7a22ff;
+}
+
+.saved-state.watching {
+  border-left: 3px solid #00a895;
+}
+
+@media (max-width: 900px) {
+  .private-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 760px) {
   .anonymous-body,
   .space-grid {
